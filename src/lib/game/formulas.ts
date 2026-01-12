@@ -3,17 +3,23 @@
  * All game math is centralized here for easy balancing
  */
 
-import type { GameState, Era, Upgrade, MatchResult } from './types';
+import type { GameState, Era, Upgrade, MatchResult, TrainingType, MatchTactic } from './types';
 
 /**
- * Base training minutes per second when starting
+ * Base conditioning per second when starting
  */
-export const BASE_TRAINING_RATE = 1;
+export const BASE_CONDITIONING_RATE = 1;
 
 /**
- * Base click power (training minutes per click)
+ * Base click power (conditioning per click)
  */
 export const BASE_CLICK_POWER = 1;
+
+/**
+ * Base cascade rate (10% per second)
+ * Conditioning -> Skating -> Shooting
+ */
+export const BASE_CASCADE_RATE = 0.1;
 
 /**
  * Match cooldown in milliseconds (30 seconds base)
@@ -26,6 +32,19 @@ export const MATCH_COOLDOWN = 30000;
 export const MORALE_BASE_COST = 100;
 export const MORALE_COST_MULTIPLIER = 1.5;
 export const MORALE_EFFECT_PER_LEVEL = 0.05;
+
+/**
+ * Tactic modifiers for matches
+ */
+export const TACTIC_MODIFIERS: Record<MatchTactic, {
+  winChance: number;
+  fanGain: number;
+  money: number;
+}> = {
+  offensive: { winChance: -0.15, fanGain: 1.0, money: 1.5 },
+  balanced: { winChance: 0, fanGain: 1.0, money: 1.0 },
+  defensive: { winChance: 0.10, fanGain: 1.5, money: 0.7 },
+};
 
 /**
  * Calculate morale multiplier (1.0 + level * 0.05)
@@ -42,12 +61,12 @@ export function calculateMoraleCost(currentLevel: number): number {
 }
 
 /**
- * Calculate training minutes generated per second
+ * Calculate conditioning generated per second (base training rate)
  */
-export function calculateTrainingRate(state: GameState): number {
-  const baseRate = BASE_TRAINING_RATE;
+export function calculateConditioningRate(state: GameState): number {
+  const baseRate = BASE_CONDITIONING_RATE;
   const eraMultiplier = getEraMultiplier(state.era);
-  const upgradeBonus = getUpgradeBonus(state.upgrades, 'training');
+  const upgradeBonus = getUpgradeBonusForType(state.upgrades, 'training', 'conditioning');
   const trainingMult = getUpgradeMultiplier(state.upgrades, 'trainingMult');
   const moraleMult = getMoraleMultiplier(state.morale);
   const devMultiplier = state.dev.speedMultiplier;
@@ -56,16 +75,65 @@ export function calculateTrainingRate(state: GameState): number {
 }
 
 /**
- * Calculate training minutes gained per click
+ * Legacy function for backward compatibility
+ */
+export function calculateTrainingRate(state: GameState): number {
+  return calculateConditioningRate(state);
+}
+
+/**
+ * Calculate conditioning gained per click
  */
 export function calculateClickPower(state: GameState): number {
   const basePower = BASE_CLICK_POWER;
-  const upgradeBonus = getUpgradeBonus(state.upgrades, 'click');
+  const upgradeBonus = getUpgradeBonusForType(state.upgrades, 'click', 'conditioning');
   const clickMult = getUpgradeMultiplier(state.upgrades, 'clickMult');
   const eraMultiplier = getEraMultiplier(state.era);
   const moraleMult = getMoraleMultiplier(state.morale);
 
   return (basePower + upgradeBonus) * clickMult * eraMultiplier * moraleMult;
+}
+
+/**
+ * Calculate cascade rates (how fast training types convert to the next tier)
+ */
+export function calculateCascadeRates(state: GameState): {
+  conditioningToSkating: number;
+  skatingToShooting: number;
+} {
+  const baseRate = BASE_CASCADE_RATE;
+  const devMultiplier = state.dev.speedMultiplier;
+
+  // Get cascade bonuses from upgrades
+  const condToSkateCascade = 1 + getCascadeBonus(state.upgrades, 'skating');
+  const skateToShootCascade = 1 + getCascadeBonus(state.upgrades, 'shooting');
+
+  return {
+    conditioningToSkating: baseRate * condToSkateCascade * devMultiplier,
+    skatingToShooting: baseRate * skateToShootCascade * devMultiplier,
+  };
+}
+
+/**
+ * Get cascade bonus from upgrades affecting a specific training type
+ */
+export function getCascadeBonus(upgrades: Upgrade[], targetType: TrainingType): number {
+  return upgrades
+    .filter((u) => u.type === 'cascade' && u.affectsType === targetType)
+    .reduce((total, u) => total + u.level * u.effect, 0);
+}
+
+/**
+ * Get upgrade bonus for a specific upgrade type that affects a specific training type
+ */
+export function getUpgradeBonusForType(
+  upgrades: Upgrade[],
+  upgradeType: Upgrade['type'],
+  trainingType: TrainingType
+): number {
+  return upgrades
+    .filter((u) => u.type === upgradeType && (!u.affectsType || u.affectsType === trainingType))
+    .reduce((total, u) => total + u.level * u.effect, 0);
 }
 
 /**
@@ -101,24 +169,55 @@ export function calculateUpgradeCost(upgrade: Upgrade): number {
 }
 
 /**
- * Check if player can afford an upgrade
+ * Get the training amount for a specific cost type
+ */
+export function getTrainingForCostType(state: GameState, costType: TrainingType | undefined): number {
+  const type = costType || 'conditioning'; // Default to conditioning
+  return state.training[type];
+}
+
+/**
+ * Check if player can afford an upgrade (using the correct training type)
  */
 export function canAffordUpgrade(state: GameState, upgradeId: string): boolean {
   const upgrade = state.upgrades.find((u) => u.id === upgradeId);
   if (!upgrade || upgrade.level >= upgrade.maxLevel) return false;
-  return state.training.totalMinutes >= calculateUpgradeCost(upgrade);
+
+  const cost = calculateUpgradeCost(upgrade);
+  const available = getTrainingForCostType(state, upgrade.costType);
+
+  return available >= cost;
+}
+
+/**
+ * Calculate shooting win chance bonus (+1% per 100 shooting, max 20%)
+ */
+export function getShootingWinBonus(shooting: number): number {
+  return Math.min(0.2, shooting / 10000);
+}
+
+/**
+ * Calculate current win chance (without challenge modifications)
+ * Now includes shooting bonus and tactic modifiers
+ */
+export function calculateWinChance(state: GameState): number {
+  const trainingBonus = Math.min(0.3, state.training.totalMinutes / 10000);
+  const shootingBonus = getShootingWinBonus(state.training.shooting);
+  const winChanceBonus = getUpgradeBonus(state.upgrades, 'winChance');
+  const shootingUpgradeBonus = getUpgradeBonus(state.upgrades, 'shootingWinChance');
+  const moraleBonus = Math.floor(state.morale.level / 20) * 0.01; // +1% per 20 levels
+  const tacticBonus = TACTIC_MODIFIERS[state.currentTactic].winChance;
+
+  return Math.min(0.9, Math.max(0.1, 0.4 + trainingBonus + shootingBonus + winChanceBonus + shootingUpgradeBonus + moraleBonus + tacticBonus));
 }
 
 /**
  * Simulate a match and return results
+ * Now includes tactic modifiers for rewards
  */
 export function simulateMatch(state: GameState): MatchResult {
-  // Base win chance starts at 40%, increases with training
-  const trainingBonus = Math.min(0.3, state.training.totalMinutes / 10000);
-  const winChanceBonus = getUpgradeBonus(state.upgrades, 'winChance');
-  const moraleBonus = Math.floor(state.morale.level / 20) * 0.01; // +1% per 20 levels
-  const winChance = Math.min(0.9, 0.4 + trainingBonus + winChanceBonus + moraleBonus);
-
+  // Get win chance with all bonuses
+  const winChance = calculateWinChance(state);
   const won = Math.random() < winChance;
 
   // Goals are somewhat random but influenced by training
@@ -128,12 +227,15 @@ export function simulateMatch(state: GameState): MatchResult {
     ? Math.floor(Math.random() * goalsFor)
     : goalsFor + 1 + Math.floor(Math.random() * 2);
 
-  // Calculate rewards
+  // Get tactic modifiers
+  const tactic = TACTIC_MODIFIERS[state.currentTactic];
+
+  // Calculate rewards with tactic modifiers
   const baseFanGain = won ? 15 : 5;
   const fanMultiplier = getUpgradeMultiplier(state.upgrades, 'fans');
   const comboMultiplier = getUpgradeMultiplier(state.upgrades, 'combo');
   const fansGained = Math.floor(
-    baseFanGain * fanMultiplier * comboMultiplier * getEraMultiplier(state.era)
+    baseFanGain * fanMultiplier * comboMultiplier * tactic.fanGain * getEraMultiplier(state.era)
   );
 
   const baseMoneyAddition = getUpgradeBonus(state.upgrades, 'baseMoney');
@@ -141,7 +243,7 @@ export function simulateMatch(state: GameState): MatchResult {
   const moneyMultiplier = getUpgradeMultiplier(state.upgrades, 'money');
   const winBonusMultiplier = won ? 1.5 + getUpgradeBonus(state.upgrades, 'winBonus') : 1;
   const moneyEarned = Math.floor(
-    baseMoneyGain * moneyMultiplier * comboMultiplier * winBonusMultiplier
+    baseMoneyGain * moneyMultiplier * comboMultiplier * winBonusMultiplier * tactic.money
   );
 
   return {

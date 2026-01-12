@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges } from '$lib/stores/game-state';
+  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, conditioningRate, cascadeRates, currentTactic as currentTacticStore } from '$lib/stores/game-state';
   import { formatNumber, formatDuration, formatMoney } from '$lib/utils/format';
-  import { calculateUpgradeCost, getMatchCooldown, calculateMoraleCost } from '$lib/game/formulas';
+  import { calculateUpgradeCost, getMatchCooldown, calculateMoraleCost, TACTIC_MODIFIERS, getTrainingForCostType, canAffordUpgrade } from '$lib/game/formulas';
+  import type { MatchTactic } from '$lib/game/types';
   import type { MatchResult, Achievement, Challenge } from '$lib/game/types';
   import DevTools from './DevTools.svelte';
 
@@ -24,6 +25,27 @@
   const locked = $derived($lockedUpgrades);
   const matchUnlocked = $derived($matchesUnlocked);
   const moraleMult = $derived($moraleMultiplier);
+  const currentWinChance = $derived($winChance);
+
+  // Training types
+  const condRate = $derived($conditioningRate);
+  const cascade = $derived($cascadeRates);
+  const tactic = $derived($currentTacticStore);
+
+  // Calculate rates for each training type display
+  const skatingRate = $derived(game.training.conditioning * cascade.conditioningToSkating);
+  const shootingRate = $derived(game.training.skating * cascade.skatingToShooting);
+
+  // Tactic info for display
+  const tacticInfo = $derived({
+    offensive: { icon: 'M3 2l8 10-8 10h4l8-10-8-10H3z', label: 'Offensive', desc: '-15% win, +50% money' },
+    balanced: { icon: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z', label: 'Balanced', desc: 'No modifiers' },
+    defensive: { icon: 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z', label: 'Defensive', desc: '+10% win, +50% fans, -30% money' },
+  });
+
+  function handleTacticChange(newTactic: MatchTactic) {
+    gameState.setTactic(newTactic);
+  }
 
   // Achievement helpers
   const bonusAchievements = $derived(
@@ -105,9 +127,7 @@
   }
 
   function canAfford(upgradeId: string): boolean {
-    const upgrade = game.upgrades.find((u) => u.id === upgradeId);
-    if (!upgrade) return false;
-    return game.training.totalMinutes >= calculateUpgradeCost(upgrade);
+    return canAffordUpgrade(game, upgradeId);
   }
 
   function getUpgradeIcon(upgradeId: string): string {
@@ -189,6 +209,16 @@
   const canAffordMorale = $derived(game.resources.money >= moraleCost);
   const moraleMaxed = $derived(game.morale.level >= game.morale.maxLevel);
   const moraleProgress = $derived((game.morale.level / game.morale.maxLevel) * 100);
+
+  // Helper to get short name for training type
+  function getCostTypeLabel(costType: string | undefined): string {
+    switch (costType) {
+      case 'conditioning': return 'cond';
+      case 'skating': return 'skt';
+      case 'shooting': return 'shot';
+      default: return 'cond';
+    }
+  }
 </script>
 
 <div class="dashboard" class:celebrating={showGoalCelebration}>
@@ -353,7 +383,57 @@
         <section class="panel training-panel">
         <div class="panel-header">
           <h2>Training Rink</h2>
-          <span class="panel-hint">Click the ice to train!</span>
+          <span class="panel-hint">Click the ice to train conditioning!</span>
+        </div>
+
+        <!-- Training Types Display -->
+        <div class="training-types">
+          <div class="training-type conditioning">
+            <div class="training-type-header">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="training-type-icon">
+                <path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/>
+              </svg>
+              <span class="training-type-label">Conditioning</span>
+            </div>
+            <div class="training-type-value">{formatNumber(game.training.conditioning)}</div>
+            <div class="training-type-rate">+{formatNumber(condRate)}/s</div>
+          </div>
+
+          <div class="cascade-arrow">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16.01 11H4v2h12.01v3L20 12l-3.99-4z"/>
+            </svg>
+            <span class="cascade-rate">{(cascade.conditioningToSkating * 100).toFixed(0)}%</span>
+          </div>
+
+          <div class="training-type skating">
+            <div class="training-type-header">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="training-type-icon">
+                <path d="M12 2L8 6H4v4l-2 2 2 2v4h4l4 4 4-4h4v-4l2-2-2-2V6h-4l-4-4z"/>
+              </svg>
+              <span class="training-type-label">Skating</span>
+            </div>
+            <div class="training-type-value">{formatNumber(game.training.skating)}</div>
+            <div class="training-type-rate">+{formatNumber(skatingRate)}/s</div>
+          </div>
+
+          <div class="cascade-arrow">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16.01 11H4v2h12.01v3L20 12l-3.99-4z"/>
+            </svg>
+            <span class="cascade-rate">{(cascade.skatingToShooting * 100).toFixed(0)}%</span>
+          </div>
+
+          <div class="training-type shooting">
+            <div class="training-type-header">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="training-type-icon">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h3V8h4v3h3l-5 5-5-5z"/>
+              </svg>
+              <span class="training-type-label">Shooting</span>
+            </div>
+            <div class="training-type-value">{formatNumber(game.training.shooting)}</div>
+            <div class="training-type-rate">+{formatNumber(shootingRate)}/s</div>
+          </div>
         </div>
 
         <button class="rink-button" onclick={handleTrainClick}>
@@ -396,6 +476,45 @@
           <h2>Play Match</h2>
           <span class="panel-hint">Challenge teams for fans & money</span>
         </div>
+
+        {#if matchUnlocked}
+          <!-- Tactic Selector -->
+          <div class="tactic-selector">
+            <span class="tactic-label">Tactic</span>
+            <div class="tactic-buttons">
+              {#each (['offensive', 'balanced', 'defensive'] as const) as tacticOption}
+                <button
+                  class="tactic-btn"
+                  class:active={tactic === tacticOption}
+                  class:offensive={tacticOption === 'offensive'}
+                  class:balanced={tacticOption === 'balanced'}
+                  class:defensive={tacticOption === 'defensive'}
+                  onclick={() => handleTacticChange(tacticOption)}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="tactic-icon">
+                    <path d={tacticInfo[tacticOption].icon} />
+                  </svg>
+                  <span class="tactic-name">{tacticInfo[tacticOption].label}</span>
+                </button>
+              {/each}
+            </div>
+            <span class="tactic-desc">{tacticInfo[tactic].desc}</span>
+          </div>
+
+          <div class="win-chance-display">
+            <span class="win-chance-label">Win Chance</span>
+            <div class="win-chance-bar">
+              <div
+                class="win-chance-fill"
+                style="width: {currentWinChance * 100}%"
+                class:low={currentWinChance < 0.45}
+                class:medium={currentWinChance >= 0.45 && currentWinChance < 0.6}
+                class:high={currentWinChance >= 0.6}
+              ></div>
+            </div>
+            <span class="win-chance-value">{Math.round(currentWinChance * 100)}%</span>
+          </div>
+        {/if}
 
         <div class="match-content">
           <button
@@ -512,12 +631,12 @@
                 </div>
               </div>
 
-              <div class="upgrade-cost">
+              <div class="upgrade-cost" class:skating-cost={upgrade.costType === 'skating'} class:shooting-cost={upgrade.costType === 'shooting'}>
                 {#if maxed}
                   <span class="maxed-label">MAX</span>
                 {:else}
                   <span class="cost-value">{formatNumber(cost)}</span>
-                  <span class="cost-unit">min</span>
+                  <span class="cost-unit">{getCostTypeLabel(upgrade.costType)}</span>
                 {/if}
               </div>
             </button>
@@ -1530,6 +1649,197 @@
     opacity: 0.7;
   }
 
+  /* Training Types Display */
+  .training-types {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding: var(--space-md);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+    flex-wrap: wrap;
+  }
+
+  .training-type {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--arena-elevated);
+    border-radius: var(--radius-md);
+    min-width: 90px;
+  }
+
+  .training-type.conditioning {
+    border-left: 3px solid var(--score-gold);
+  }
+
+  .training-type.skating {
+    border-left: 3px solid var(--ice-blue);
+  }
+
+  .training-type.shooting {
+    border-left: 3px solid var(--score-red);
+  }
+
+  .training-type-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .training-type-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.8;
+  }
+
+  .training-type.conditioning .training-type-icon {
+    color: var(--score-gold);
+  }
+
+  .training-type.skating .training-type-icon {
+    color: var(--ice-blue);
+  }
+
+  .training-type.shooting .training-type-icon {
+    color: var(--score-red);
+  }
+
+  .training-type-label {
+    font-size: 0.7rem;
+    color: var(--ice-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .training-type-value {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--ice-white);
+  }
+
+  .training-type-rate {
+    font-size: 0.65rem;
+    color: var(--ice-blue);
+    opacity: 0.7;
+  }
+
+  .cascade-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    opacity: 0.6;
+  }
+
+  .cascade-arrow svg {
+    width: 20px;
+    height: 20px;
+    color: var(--ice-blue);
+    animation: pulse-arrow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-arrow {
+    0%, 100% { opacity: 0.4; transform: translateX(0); }
+    50% { opacity: 1; transform: translateX(3px); }
+  }
+
+  .cascade-rate {
+    font-size: 0.6rem;
+    color: var(--ice-blue);
+  }
+
+  /* Tactic Selector */
+  .tactic-selector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding: var(--space-md);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+  }
+
+  .tactic-label {
+    font-size: 0.75rem;
+    color: var(--ice-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+  }
+
+  .tactic-buttons {
+    display: flex;
+    gap: var(--space-sm);
+  }
+
+  .tactic-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--arena-elevated);
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 70px;
+  }
+
+  .tactic-btn:hover {
+    background: var(--arena-card);
+    transform: translateY(-2px);
+  }
+
+  .tactic-btn.active {
+    border-color: var(--ice-blue);
+    background: var(--arena-card);
+    box-shadow: 0 0 15px rgba(100, 200, 255, 0.3);
+  }
+
+  .tactic-btn.active.offensive {
+    border-color: var(--score-red);
+    box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
+  }
+
+  .tactic-btn.active.defensive {
+    border-color: var(--score-gold);
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
+  }
+
+  .tactic-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--ice-white);
+  }
+
+  .tactic-btn.offensive .tactic-icon {
+    color: var(--score-red);
+  }
+
+  .tactic-btn.defensive .tactic-icon {
+    color: var(--score-gold);
+  }
+
+  .tactic-name {
+    font-size: 0.65rem;
+    color: var(--ice-white);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .tactic-desc {
+    font-size: 0.7rem;
+    color: var(--ice-blue);
+    opacity: 0.8;
+  }
+
   /* Training Rink */
   .rink-button {
     display: block;
@@ -1730,6 +2040,58 @@
   }
 
   /* Match Panel */
+  .win-chance-display {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--arena-elevated);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-sm);
+  }
+
+  .win-chance-label {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .win-chance-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--arena-surface);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .win-chance-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease, background 0.3s ease;
+  }
+
+  .win-chance-fill.low {
+    background: linear-gradient(90deg, var(--danger-red) 0%, #e74c3c 100%);
+  }
+
+  .win-chance-fill.medium {
+    background: linear-gradient(90deg, #f39c12 0%, #f1c40f 100%);
+  }
+
+  .win-chance-fill.high {
+    background: linear-gradient(90deg, var(--score-green) 0%, #1fa268 100%);
+  }
+
+  .win-chance-value {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 40px;
+    text-align: right;
+  }
+
   .match-content {
     display: flex;
     flex-direction: column;
@@ -2108,6 +2470,14 @@
     font-family: var(--font-score);
     font-size: 0.9rem;
     color: var(--score-gold);
+  }
+
+  .upgrade-cost.skating-cost .cost-value {
+    color: var(--ice-blue);
+  }
+
+  .upgrade-cost.shooting-cost .cost-value {
+    color: var(--score-red);
   }
 
   .cost-unit {

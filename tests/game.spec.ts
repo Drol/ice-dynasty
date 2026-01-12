@@ -32,8 +32,12 @@ test.describe('Ice Dynasty Game', () => {
       await page.getByRole('textbox', { name: /Club Name/i }).fill('Test Club');
       await page.getByRole('button', { name: 'Found Club' }).click();
 
-      // Check achievements tab shows 1 unlocked
-      await expect(page.getByRole('button', { name: /Achievements 1/i })).toBeVisible();
+      // Check achievements tab shows at least 1 unlocked (badge is separate element)
+      const achievementsTab = page.getByRole('button', { name: /Achievements/i });
+      await expect(achievementsTab).toBeVisible();
+      // Badge should have a number >= 1
+      const badgeText = await achievementsTab.locator('.tab-badge').textContent();
+      expect(parseInt(badgeText || '0')).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -130,11 +134,12 @@ test.describe('Ice Dynasty Game', () => {
     test('should buy upgrade and increase cost', async ({ page }) => {
       await page.getByRole('button', { name: 'Upgrades' }).click();
 
-      const upgradeButton = page.getByRole('button', { name: /Better Skates.*10 min/i });
+      // Look for Better Skates with 10 cost (now shows "cond" instead of "min")
+      const upgradeButton = page.getByRole('button', { name: /Better Skates.*10.*cond/i });
       await upgradeButton.click();
 
-      // Cost should have increased
-      await expect(page.getByRole('button', { name: /Better Skates.*15 min/i })).toBeVisible();
+      // Cost should have increased to 15 after purchase
+      await expect(page.getByRole('button', { name: /Better Skates.*15.*cond/i })).toBeVisible();
     });
 
     test('should show locked upgrades with requirements', async ({ page }) => {
@@ -306,11 +311,12 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should change training rate when speed is changed', async ({ page }) => {
-      await expect(page.locator('text=+1/s')).toBeVisible();
+      // Check header rate (more specific to avoid matching training type rates)
+      await expect(page.locator('.header-resource-rate').first()).toHaveText('+1/s');
 
       await page.getByRole('button', { name: '100x' }).click();
 
-      await expect(page.locator('text=+100/s')).toBeVisible();
+      await expect(page.locator('.header-resource-rate').first()).toHaveText('+100/s');
     });
 
     test('should reset game when reset button is clicked', async ({ page }) => {

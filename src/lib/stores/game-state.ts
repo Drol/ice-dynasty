@@ -3,14 +3,18 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import type { GameState, MatchResult, Upgrade, Achievement, Challenge } from '$lib/game/types';
+import type { GameState, MatchResult, Upgrade, Achievement, Challenge, MatchTactic } from '$lib/game/types';
 import { INITIAL_GAME_STATE, INITIAL_UPGRADES, INITIAL_ACHIEVEMENTS, INITIAL_CHALLENGES } from '$lib/game/types';
 import {
   calculateTrainingRate,
+  calculateConditioningRate,
+  calculateCascadeRates,
   calculateClickPower,
   calculateUpgradeCost,
+  getTrainingForCostType,
   calculateMoraleCost,
   getMoraleMultiplier,
+  calculateWinChance,
   simulateMatch,
   canPlayMatch,
 } from '$lib/game/formulas';
@@ -36,6 +40,10 @@ function isUpgradeUnlocked(upgrade: Upgrade, state: GameState): boolean {
       return state.resources.money >= value;
     case 'trainingMinutes':
       return state.training.totalMinutes >= value;
+    case 'skating':
+      return state.training.skating >= value;
+    case 'shooting':
+      return state.training.shooting >= value;
     default:
       return true;
   }
@@ -198,14 +206,31 @@ function loadState(): GameState {
         });
       }
 
+      // Migrate old training format (version 1) to new format (version 2)
+      let migratedTraining = { ...INITIAL_GAME_STATE.training, ...parsed.training };
+      if (parsed.training && !('conditioning' in parsed.training)) {
+        // Old format: { minutesPerSecond, totalMinutes }
+        const oldTotal = (parsed.training as { totalMinutes?: number }).totalMinutes || 0;
+        migratedTraining = {
+          conditioning: oldTotal * 0.6,
+          skating: oldTotal * 0.3,
+          shooting: oldTotal * 0.1,
+          totalMinutes: oldTotal,
+        };
+      }
+
+      // Ensure currentTactic exists (new in version 2)
+      const currentTactic = parsed.currentTactic || 'balanced';
+
       // Merge with initial state to handle new fields
       return {
         ...INITIAL_GAME_STATE,
         ...parsed,
         // Ensure nested objects are properly merged
         resources: { ...INITIAL_GAME_STATE.resources, ...parsed.resources },
-        training: { ...INITIAL_GAME_STATE.training, ...parsed.training },
+        training: migratedTraining,
         morale: { ...INITIAL_GAME_STATE.morale, ...parsed.morale },
+        currentTactic,
         era: { ...INITIAL_GAME_STATE.era, ...parsed.era },
         stats: { ...INITIAL_GAME_STATE.stats, ...parsed.stats },
         settings: { ...INITIAL_GAME_STATE.settings, ...parsed.settings },
@@ -319,9 +344,12 @@ function createGameStore() {
           },
         },
         training: {
-          minutesPerSecond: 1,
+          conditioning: 0,
+          skating: 0,
+          shooting: 0,
           totalMinutes: 0,
         },
+        currentTactic: 'balanced',
         resources: {
           ...state.resources,
           fans: 10,
@@ -342,23 +370,40 @@ function createGameStore() {
 
     /**
      * Game tick - called every frame
+     * Handles conditioning generation and cascade system
      */
     tick(deltaSeconds: number) {
       update((state) => {
         if (!state.club) return state;
 
-        // Check for active fatigue_test challenge - disables passive training
+        // Check for active challenge restrictions
         const activeChallenge = getActiveChallenge(state);
         const hasPassiveTraining = activeChallenge?.id !== 'fatigue_test';
 
-        const trainingRate = hasPassiveTraining ? calculateTrainingRate(state) : 0;
-        const minutesGained = trainingRate * deltaSeconds;
+        // Calculate conditioning gained this tick
+        const conditioningRate = hasPassiveTraining ? calculateConditioningRate(state) : 0;
+        const conditioningGained = conditioningRate * deltaSeconds;
+
+        // Calculate cascade rates
+        const cascadeRates = calculateCascadeRates(state);
+
+        // Calculate cascade amounts (percentage of current amount per second)
+        const conditioningToSkating = state.training.conditioning * cascadeRates.conditioningToSkating * deltaSeconds;
+        const skatingToShooting = state.training.skating * cascadeRates.skatingToShooting * deltaSeconds;
+
+        // Update training amounts
+        const newConditioning = state.training.conditioning + conditioningGained - conditioningToSkating;
+        const newSkating = state.training.skating + conditioningToSkating - skatingToShooting;
+        const newShooting = state.training.shooting + skatingToShooting;
+        const newTotal = newConditioning + newSkating + newShooting;
 
         return {
           ...state,
           training: {
-            ...state.training,
-            totalMinutes: state.training.totalMinutes + minutesGained,
+            conditioning: Math.max(0, newConditioning),
+            skating: Math.max(0, newSkating),
+            shooting: Math.max(0, newShooting),
+            totalMinutes: newTotal,
           },
           stats: {
             ...state.stats,
@@ -402,11 +447,16 @@ function createGameStore() {
           t => now - t <= 10000
         );
 
+        // Add to conditioning (will cascade to skating and shooting)
+        const newConditioning = state.training.conditioning + clickPower;
+        const newTotal = newConditioning + state.training.skating + state.training.shooting;
+
         return {
           ...state,
           training: {
             ...state.training,
-            totalMinutes: state.training.totalMinutes + clickPower,
+            conditioning: newConditioning,
+            totalMinutes: newTotal,
           },
           stats: {
             ...state.stats,
@@ -436,18 +486,23 @@ function createGameStore() {
         if (upgrade.level >= upgrade.maxLevel) return state;
 
         const cost = calculateUpgradeCost(upgrade);
-        if (state.training.totalMinutes < cost) return state;
+        const costType = upgrade.costType || 'conditioning';
+        const available = getTrainingForCostType(state, costType);
+
+        if (available < cost) return state;
 
         success = true;
         const newUpgrades = [...state.upgrades];
         newUpgrades[upgradeIndex] = { ...upgrade, level: upgrade.level + 1 };
 
+        // Deduct from the correct training type
+        const newTraining = { ...state.training };
+        newTraining[costType] -= cost;
+        newTraining.totalMinutes = newTraining.conditioning + newTraining.skating + newTraining.shooting;
+
         return {
           ...state,
-          training: {
-            ...state.training,
-            totalMinutes: state.training.totalMinutes - cost,
-          },
+          training: newTraining,
           upgrades: newUpgrades,
         };
       });
@@ -678,6 +733,17 @@ function createGameStore() {
     },
 
     /**
+     * Set match tactic
+     */
+    setTactic(tactic: MatchTactic) {
+      update((state) => ({
+        ...state,
+        currentTactic: tactic,
+      }));
+      this.save();
+    },
+
+    /**
      * Set dev speed multiplier
      */
     setDevSpeed(multiplier: number) {
@@ -801,6 +867,21 @@ export const moraleMultiplier = derived(
 );
 
 /**
+ * Current win chance (takes into account active challenge restrictions)
+ */
+export const winChance = derived(gameState, ($state) => {
+  let chance = calculateWinChance($state);
+
+  // Apply challenge restrictions
+  const activeChall = $state.challenges.find((c) => c.active);
+  if (activeChall?.id === 'rookie_mode') {
+    chance = Math.min(0.5, chance); // Cap at 50%
+  }
+
+  return chance;
+});
+
+/**
  * All challenges with their unlock status
  */
 export const challengesWithStatus = derived(gameState, ($state) =>
@@ -830,3 +911,18 @@ export const completedChallenges = derived(gameState, ($state) =>
 export const availableChallenges = derived(challengesWithStatus, ($challenges) =>
   $challenges.filter((c) => c.isUnlocked && !c.completed && !c.active)
 );
+
+/**
+ * Current match tactic
+ */
+export const currentTactic = derived(gameState, ($state) => $state.currentTactic);
+
+/**
+ * Current cascade rates
+ */
+export const cascadeRates = derived(gameState, ($state) => calculateCascadeRates($state));
+
+/**
+ * Conditioning rate (per second)
+ */
+export const conditioningRate = derived(gameState, ($state) => calculateConditioningRate($state));
