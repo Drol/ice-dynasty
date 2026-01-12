@@ -83,8 +83,48 @@ yarn dev            # Dev server only
 yarn check          # TypeScript type check
 yarn build          # Production build
 
+# Testing
+yarn test           # Run all Playwright tests
+yarn test:ui        # Run tests with Playwright UI
+yarn test:headed    # Run tests with visible browser
+
 # VS Code
 Ctrl+Shift+B        # Run "Start Dev Server" task
+```
+
+## Testing
+
+### Playwright Tests
+Tests live in `tests/` directory and cover:
+- Club creation
+- Training system (passive + click)
+- Match system
+- Upgrade system
+- Morale system
+- Challenge system
+- Achievement system
+- Dev tools
+
+### Test Policy
+**New features MUST include tests:**
+- Add tests when implementing new features from ROADMAP.md
+- Update existing tests when making changes that affect them
+- Run `yarn test` before committing to verify nothing is broken
+
+### Writing Tests
+```typescript
+// tests/game.spec.ts
+test('should do something', async ({ page }) => {
+  // Setup
+  await page.getByRole('textbox', { name: /Club Name/i }).fill('Test');
+  await page.getByRole('button', { name: 'Found Club' }).click();
+
+  // Action
+  await page.getByRole('button', { name: 'Play Match' }).click();
+
+  // Assert
+  await expect(page.locator('text=Victory')).toBeVisible();
+});
 ```
 
 ## Git Workflow

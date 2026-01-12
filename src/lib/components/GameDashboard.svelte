@@ -242,6 +242,33 @@
         </div>
       </div>
     </div>
+
+    <!-- Resource Bar (always visible in header) -->
+    <div class="header-resources">
+      <div class="header-resource training">
+        <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+        </svg>
+        <div class="header-resource-content">
+          <span class="header-resource-value">{formatNumber(minutes)}</span>
+          <span class="header-resource-rate">+{formatNumber(rate)}/s</span>
+        </div>
+      </div>
+
+      <div class="header-resource fans">
+        <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+        </svg>
+        <span class="header-resource-value">{formatNumber(game.resources.fans)}</span>
+      </div>
+
+      <div class="header-resource money">
+        <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
+        </svg>
+        <span class="header-resource-value">{formatMoney(game.resources.money)}</span>
+      </div>
+    </div>
   </header>
 
   <!-- Tab Navigation -->
@@ -271,99 +298,55 @@
   </nav>
 
   <main class="main">
-    <!-- Resource Scoreboard (always visible) -->
-    <section class="resources-panel">
-      <div class="resource-card primary">
-        <div class="resource-icon">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
-          </svg>
-        </div>
-        <div class="resource-content">
-          <span class="resource-label">Training Minutes</span>
-          <span class="resource-value led-display">{formatNumber(minutes)}</span>
-          <span class="resource-rate">
-            <span class="rate-passive">+{formatNumber(rate)}/s</span>
-            <span class="rate-click">+{formatNumber(clickPwr)}/click</span>
-          </span>
-        </div>
-      </div>
-
-      <div class="resource-card">
-        <div class="resource-icon fans">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-          </svg>
-        </div>
-        <div class="resource-content">
-          <span class="resource-label">Fans</span>
-          <span class="resource-value led-display">{formatNumber(game.resources.fans)}</span>
-        </div>
-      </div>
-
-      <div class="resource-card">
-        <div class="resource-icon money">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
-          </svg>
-        </div>
-        <div class="resource-content">
-          <span class="resource-label">Money</span>
-          <span class="resource-value led-display">{formatMoney(game.resources.money)}</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Lagmoral (Global Multiplier) -->
-    <section class="morale-panel">
-      <div class="morale-header">
-        <div class="morale-title">
-          <svg class="morale-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-          </svg>
-          <div class="morale-info">
-            <h3>Team Morale</h3>
-            <span class="morale-hint">Global multiplier for all production</span>
-          </div>
-        </div>
-        <div class="morale-stats">
-          <div class="morale-level">
-            <span class="level-label">Level</span>
-            <span class="level-value">{game.morale.level}/{game.morale.maxLevel}</span>
-          </div>
-          <div class="morale-multiplier">
-            <span class="mult-label">Boost</span>
-            <span class="mult-value">{moraleMult.toFixed(2)}x</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="morale-progress-container">
-        <div class="morale-progress-bar">
-          <div class="morale-progress-fill" style="width: {moraleProgress}%"></div>
-        </div>
-      </div>
-
-      <button
-        class="morale-boost-btn"
-        class:affordable={canAffordMorale}
-        class:maxed={moraleMaxed}
-        onclick={handleBoostMorale}
-        disabled={!canAffordMorale || moraleMaxed}
-      >
-        {#if moraleMaxed}
-          <span class="btn-text">Maximum Morale</span>
-        {:else}
-          <div class="btn-content">
-            <span class="btn-text">Boost Morale</span>
-            <span class="btn-cost">{formatMoney(moraleCost)}</span>
-          </div>
-        {/if}
-      </button>
-    </section>
-
     <!-- Tab Content -->
     {#if activeTab === 'dashboard'}
+      <!-- Lagmoral (Global Multiplier) - Dashboard only -->
+      <section class="morale-panel">
+        <div class="morale-header">
+          <div class="morale-title">
+            <svg class="morale-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            <div class="morale-info">
+              <h3>Team Morale</h3>
+              <span class="morale-hint">Global multiplier for all production</span>
+            </div>
+          </div>
+          <div class="morale-stats">
+            <div class="morale-level">
+              <span class="level-label">Level</span>
+              <span class="level-value">{game.morale.level}/{game.morale.maxLevel}</span>
+            </div>
+            <div class="morale-multiplier">
+              <span class="mult-label">Boost</span>
+              <span class="mult-value">{moraleMult.toFixed(2)}x</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="morale-progress-container">
+          <div class="morale-progress-bar">
+            <div class="morale-progress-fill" style="width: {moraleProgress}%"></div>
+          </div>
+        </div>
+
+        <button
+          class="morale-boost-btn"
+          class:affordable={canAffordMorale}
+          class:maxed={moraleMaxed}
+          onclick={handleBoostMorale}
+          disabled={!canAffordMorale || moraleMaxed}
+        >
+          {#if moraleMaxed}
+            <span class="btn-text">Maximum Morale</span>
+          {:else}
+            <div class="btn-content">
+              <span class="btn-text">Boost Morale</span>
+              <span class="btn-cost">{formatMoney(moraleCost)}</span>
+            </div>
+          {/if}
+        </button>
+      </section>
       <!-- Main Game Grid -->
       <div class="game-grid">
         <!-- Training Rink -->
@@ -1052,6 +1035,63 @@
     font-size: 0.95rem;
     color: var(--ice-white);
     letter-spacing: 0.05em;
+  }
+
+  /* Header Resources Bar */
+  .header-resources {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-xl);
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--arena-surface);
+    border-bottom: 1px solid var(--arena-elevated);
+  }
+
+  .header-resource {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-md);
+    background: var(--arena-dark);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--arena-elevated);
+  }
+
+  .header-resource-icon {
+    width: 18px;
+    height: 18px;
+    fill: var(--ice-blue);
+  }
+
+  .header-resource.training .header-resource-icon {
+    fill: var(--ice-blue);
+  }
+
+  .header-resource.fans .header-resource-icon {
+    fill: var(--score-red);
+  }
+
+  .header-resource.money .header-resource-icon {
+    fill: var(--score-gold);
+  }
+
+  .header-resource-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-resource-value {
+    font-family: var(--font-score);
+    font-size: 1rem;
+    color: var(--ice-white);
+    letter-spacing: 0.05em;
+  }
+
+  .header-resource-rate {
+    font-size: 0.65rem;
+    color: var(--ice-pale);
+    opacity: 0.8;
   }
 
   /* Tab Navigation */
