@@ -115,6 +115,68 @@ yarn build          # Production build
 
 # VS Code
 Ctrl+Shift+B        # Run "Start Dev Server" task
+
+# Git
+git status          # Check working tree status
+git log --oneline   # View commit history
+```
+
+## Git Workflow
+
+### Commit Policy
+Commits are made **automatically** when:
+- A feature from the roadmap is completed
+- A major bug fix is implemented
+- The user explicitly requests a commit
+
+### Commit Message Format
+Using **Conventional Commits** with Co-Authored-By:
+
+```
+<type>: <subject>
+
+<body>
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+### Commit Types
+| Type | Usage |
+|------|-------|
+| `feat:` | New feature (e.g., "feat: add division system") |
+| `fix:` | Bug fixes |
+| `refactor:` | Code improvements without functionality changes |
+| `style:` | Visual/CSS changes |
+| `perf:` | Performance improvements |
+| `docs:` | Documentation updates |
+| `chore:` | Dependencies, configuration |
+
+### Examples
+```bash
+# Feature commit
+feat: add player roster management
+
+- Add player stats (skill, stamina, morale)
+- Implement roster screen with player cards
+- Add player training mechanics
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+
+# Bug fix commit
+fix: correct offline progress calculation
+
+Training minutes were not accumulating correctly when game was closed.
+Now properly calculates elapsed time * training rate.
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+
+# Style commit
+style: improve upgrade card spacing
+
+Reduce padding and margins for more compact layout.
+Upgrades now more visible without scrolling.
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 ```
 
 ## Important Notes
@@ -145,7 +207,7 @@ Ctrl+Shift+B        # Run "Start Dev Server" task
 - [x] Basic training (passive + click)
 - [x] Simple matches
 - [x] 4 starter upgrades
-- [ ] Visual click feedback
+- [x] Visual click feedback (ripple effects + goal celebration)
 - [ ] More upgrades
 
 ### Era 2: Local Club
