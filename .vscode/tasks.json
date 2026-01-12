@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Dev Server",
+      "type": "shell",
+      "command": "distrobox enter main-dev -- yarn start",
+      "problemMatcher": [],
+      "isBackground": true,
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Type Check",
+      "type": "shell",
+      "command": "distrobox enter main-dev -- yarn check",
+      "problemMatcher": ["$tsc"],
+      "group": "test"
+    },
+    {
+      "label": "Build",
+      "type": "shell",
+      "command": "distrobox enter main-dev -- yarn build",
+      "problemMatcher": [],
+      "group": "build"
+    }
+  ]
+}
