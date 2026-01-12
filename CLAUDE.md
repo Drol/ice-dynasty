@@ -83,13 +83,44 @@ src/
 | Fans | Win matches | Increase match income |
 | Money | Play matches | (Future: buy facilities) |
 
-### Upgrades (in `types.ts`)
-| ID | Name | Effect | Base Cost | Scaling |
-|----|------|--------|-----------|---------|
-| better_skates | Better Skates | +1 click power | 10 | 1.5x |
-| training_rink | Training Rink | +0.5/s passive | 50 | 1.4x |
-| youth_program | Youth Program | +10% fan gain | 200 | 1.8x |
-| merchandise | Merchandise Stand | +20% match money | 500 | 2.0x |
+### Upgrade Types
+
+| Type | Effect | Example |
+|------|--------|---------|
+| `click` | Additive click power boost | +1 training/click |
+| `training` | Additive passive training rate | +0.5 training/s |
+| `fans` | Percentage boost to fan gain | +10% fans from matches |
+| `money` | Percentage boost to money gain | +20% money from matches |
+| `winChance` | Additive win probability boost | +2.5% win chance |
+| `clickMult` | Multiplicative click power | 1.1x click multiplier |
+| `baseMoney` | Flat addition to base match money | +$25 base money |
+| `combo` | Affects multiple stats | +5% fans AND money |
+| `winBonus` | Extra rewards on win only | +100% rewards on win |
+| `trainingMult` | Multiplicative training rate | 1.25x all training |
+
+### Era 1 Upgrades (14 total)
+
+**Always Available (7):**
+| ID | Name | Effect | Base Cost | Scaling | Max |
+|----|------|--------|-----------|---------|-----|
+| better_skates | Better Skates | +1 click | 10 | 1.5x | 50 |
+| training_rink | Training Rink | +0.5/s training | 50 | 1.4x | 100 |
+| youth_program | Youth Program | +10% fans | 200 | 1.8x | 25 |
+| merchandise | Merchandise Stand | +20% money | 500 | 2.0x | 25 |
+| hockey_sticks | Better Sticks | +2 click | 25 | 1.6x | 40 |
+| volunteer_coaches | Volunteer Coaches | +1/s training | 100 | 1.5x | 75 |
+| garage_rink | Garage Rink | +2.5% win chance | 150 | 1.7x | 20 |
+
+**Unlockable (7):**
+| ID | Name | Effect | Cost | Unlock Requirement |
+|----|------|--------|------|---------------------|
+| equipment_locker | Equipment Locker | 1.1x click mult | 400 | 500 fans |
+| local_sponsors | Local Sponsors | +$25 base money | 750 | 50 matches played |
+| team_jerseys | Team Jerseys | +5% fans & money | 1000 | 1000 fans |
+| outdoor_flooding | Outdoor Flooding | +3/s training | 2500 | 100 matches played |
+| community_support | Community Support | +50% fans | 5000 | 2500 fans |
+| tournament_entry | Tournament Entry | +100% win bonus | 10000 | 25 wins |
+| grassroots_legend | Grassroots Legend | 1.25x training mult | 25000 | 5000 fans |
 
 ### Match System
 - 30 second cooldown (reduced by dev speed)
@@ -97,6 +128,35 @@ src/
 - Win: ~15 fans, 1.5x money
 - Loss: ~5 fans, 1x money
 - Money = 50 + (fans * 2) * multipliers
+
+### Era 1 Progression Milestones
+
+| Milestone | Requirement | Reward/Unlock |
+|-----------|-------------|---------------|
+| First Steps | Create club | Tutorial complete |
+| Amateur Hour | 100 training minutes | Equipment Locker visible |
+| First Match | Play 1 match | Match mechanics explained |
+| Winning Streak | Win 5 matches | Achievement |
+| Century Club | 100 fans | Team Jerseys visible |
+| Local Fame | 500 fans | Equipment Locker unlocked |
+| Dedicated Trainer | 50 matches played | Local Sponsors unlocked |
+| Rising Star | 1000 fans | Team Jerseys unlocked |
+| Grinder | 100 matches played | Outdoor Flooding unlocked |
+| Community Pillar | 2500 fans | Community Support unlocked |
+| Champion | 25 wins | Tournament Entry unlocked |
+| Grassroots Elite | 5000 fans | Grassroots Legend unlocked |
+| **Ready for League** | **10000 fans + 50 wins + $50k** | **Era 2 unlocked** |
+
+### Era 1 Completion Criteria
+
+**Required to advance to Era 2:**
+- **10,000 fans** - Shows community growth
+- **50 matches won** - Proves competitive readiness
+- **$50,000 accumulated** - Funding for league entry
+
+**Optional (suggested):**
+- Win rate >50%
+- At least 1 level in each upgrade type
 
 ## Dev Tools
 Located bottom-right when `dev.enabled = true` (default during dev):
@@ -203,12 +263,16 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## Planned Features (Roadmap)
 
-### Era 1: Grassroots (Current)
+### Era 1: Grassroots (In Progress)
 - [x] Basic training (passive + click)
 - [x] Simple matches
 - [x] 4 starter upgrades
 - [x] Visual click feedback (ripple effects + goal celebration)
-- [ ] More upgrades
+- [x] Complete upgrade design (14 total upgrades planned)
+- [ ] Implement 10 new upgrades with unlock system
+- [ ] Add milestone tracking system
+- [ ] Implement new upgrade types (winChance, clickMult, baseMoney, combo, winBonus, trainingMult)
+- [ ] Add Era 2 transition UI when completion criteria met
 
 ### Era 2: Local Club
 - [ ] Division/league system
@@ -240,3 +304,13 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **Container**: `main-dev` distrobox (Ubuntu 24.04)
 - **Yarn**: Using node_modules linker (not PnP) for Vite compatibility
 - **Dev logging**: `yarn dev` pipes to `/tmp/vite.log` via tee
+- **Design aesthetic**: Vintage arena scoreboard with Bebas Neue, Orbitron, Barlow fonts
+- **Default team colors**: Red (#dc2626) and white (#ffffff)
+
+### 2026-01-12 (Evening)
+- **Era 1 planning**: Used Opus to design complete Era 1 progression system
+- **Upgrade system**: Expanded from 4 to 14 upgrades with unlock conditions
+- **New upgrade types**: 6 new effect types (winChance, clickMult, baseMoney, combo, winBonus, trainingMult)
+- **Progression design**: Milestone system with 13 milestones from "First Steps" to "Ready for League"
+- **Era completion**: Requires 10k fans, 50 wins, $50k to unlock Era 2
+- **Expected playtime**: 2-6 hours to complete Era 1
