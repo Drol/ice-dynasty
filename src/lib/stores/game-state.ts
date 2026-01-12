@@ -383,3 +383,16 @@ export const visibleUpgrades = derived(upgradesWithStatus, ($upgrades) =>
 export const lockedUpgrades = derived(upgradesWithStatus, ($upgrades) =>
   $upgrades.filter((u) => !u.isUnlocked)
 );
+
+/**
+ * Match unlock threshold (training minutes required)
+ */
+export const MATCH_UNLOCK_THRESHOLD = 100;
+
+/**
+ * Whether matches are unlocked
+ */
+export const matchesUnlocked = derived(
+  gameState,
+  ($state) => $state.training.totalMinutes >= MATCH_UNLOCK_THRESHOLD
+);

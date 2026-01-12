@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades } from '$lib/stores/game-state';
+  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD } from '$lib/stores/game-state';
   import { formatNumber, formatDuration, formatMoney } from '$lib/utils/format';
   import { calculateUpgradeCost, getMatchCooldown } from '$lib/game/formulas';
   import type { MatchResult } from '$lib/game/types';
@@ -11,6 +11,7 @@
   const clickPwr = $derived($clickPower);
   const available = $derived($visibleUpgrades);
   const locked = $derived($lockedUpgrades);
+  const matchUnlocked = $derived($matchesUnlocked);
 
   let lastMatchResult = $state<MatchResult | null>(null);
   let matchCooldownMs = $state(0);
@@ -269,10 +270,19 @@
         <div class="match-content">
           <button
             class="match-btn"
+            class:locked={!matchUnlocked}
             onclick={handlePlayMatch}
-            disabled={matchCooldownMs > 0}
+            disabled={matchCooldownMs > 0 || !matchUnlocked}
           >
-            {#if matchCooldownMs > 0}
+            {#if !matchUnlocked}
+              <div class="match-locked">
+                <svg class="lock-icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z" />
+                </svg>
+                <span class="lock-text">Locked</span>
+                <span class="lock-requirement">Train {formatNumber(MATCH_UNLOCK_THRESHOLD - minutes)} more minutes</span>
+              </div>
+            {:else if matchCooldownMs > 0}
               <div class="cooldown-ring">
                 <svg viewBox="0 0 100 100">
                   <circle class="cooldown-bg" cx="50" cy="50" r="45" />
@@ -994,6 +1004,46 @@
     background: var(--arena-elevated);
     cursor: not-allowed;
     box-shadow: none;
+  }
+
+  .match-btn.locked {
+    background: linear-gradient(
+      135deg,
+      var(--arena-elevated) 0%,
+      var(--arena-dark) 100%
+    );
+    border: 2px solid var(--arena-elevated);
+  }
+
+  .match-locked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    height: 100%;
+    padding: var(--space-md);
+  }
+
+  .lock-icon {
+    width: 32px;
+    height: 32px;
+    color: var(--score-red);
+    opacity: 0.7;
+  }
+
+  .lock-text {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--ice-pale);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .lock-requirement {
+    font-size: 0.75rem;
+    color: var(--ice-blue);
+    text-align: center;
   }
 
   .cooldown-ring {
