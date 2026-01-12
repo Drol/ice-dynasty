@@ -21,6 +21,27 @@ export const BASE_CLICK_POWER = 1;
 export const MATCH_COOLDOWN = 30000;
 
 /**
+ * Morale constants
+ */
+export const MORALE_BASE_COST = 100;
+export const MORALE_COST_MULTIPLIER = 1.5;
+export const MORALE_EFFECT_PER_LEVEL = 0.05;
+
+/**
+ * Calculate morale multiplier (1.0 + level * 0.05)
+ */
+export function getMoraleMultiplier(morale: { level: number }): number {
+  return 1.0 + morale.level * MORALE_EFFECT_PER_LEVEL;
+}
+
+/**
+ * Calculate cost for next morale level
+ */
+export function calculateMoraleCost(currentLevel: number): number {
+  return Math.floor(MORALE_BASE_COST * Math.pow(MORALE_COST_MULTIPLIER, currentLevel));
+}
+
+/**
  * Calculate training minutes generated per second
  */
 export function calculateTrainingRate(state: GameState): number {
@@ -28,9 +49,10 @@ export function calculateTrainingRate(state: GameState): number {
   const eraMultiplier = getEraMultiplier(state.era);
   const upgradeBonus = getUpgradeBonus(state.upgrades, 'training');
   const trainingMult = getUpgradeMultiplier(state.upgrades, 'trainingMult');
+  const moraleMult = getMoraleMultiplier(state.morale);
   const devMultiplier = state.dev.speedMultiplier;
 
-  return (baseRate + upgradeBonus) * eraMultiplier * trainingMult * devMultiplier;
+  return (baseRate + upgradeBonus) * eraMultiplier * trainingMult * moraleMult * devMultiplier;
 }
 
 /**
@@ -41,8 +63,9 @@ export function calculateClickPower(state: GameState): number {
   const upgradeBonus = getUpgradeBonus(state.upgrades, 'click');
   const clickMult = getUpgradeMultiplier(state.upgrades, 'clickMult');
   const eraMultiplier = getEraMultiplier(state.era);
+  const moraleMult = getMoraleMultiplier(state.morale);
 
-  return (basePower + upgradeBonus) * clickMult * eraMultiplier;
+  return (basePower + upgradeBonus) * clickMult * eraMultiplier * moraleMult;
 }
 
 /**
@@ -93,7 +116,8 @@ export function simulateMatch(state: GameState): MatchResult {
   // Base win chance starts at 40%, increases with training
   const trainingBonus = Math.min(0.3, state.training.totalMinutes / 10000);
   const winChanceBonus = getUpgradeBonus(state.upgrades, 'winChance');
-  const winChance = Math.min(0.9, 0.4 + trainingBonus + winChanceBonus);
+  const moraleBonus = Math.floor(state.morale.level / 20) * 0.01; // +1% per 20 levels
+  const winChance = Math.min(0.9, 0.4 + trainingBonus + winChanceBonus + moraleBonus);
 
   const won = Math.random() < winChance;
 

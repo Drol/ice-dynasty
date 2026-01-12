@@ -179,3 +179,11 @@ Alla achievements har dolda krav. Svåra/meningsfulla ger permanenta bonusar.
 - **Play Match unlock:** Låst bakom 100 träningsminuter
 - **Achievements:** Blandning av bonus och cosmetic med dolda krav
 - **Challenges:** Frivilliga men starkt incentiverade (3x längre utan)
+
+### 2026-01-12 (Natt) - UX Beslut
+- **Navigation:** Tab-baserad (Dashboard | Upgrades | Achievements | Challenges | Stats)
+- **Tab-unlock:** Nya tabs dyker upp när relevant (t.ex. Achievements efter club creation)
+- **Achievement-discovery (Hybrid):**
+  - Bonus achievements: Synliga från start med namn + reward-typ, krav dolda ("???")
+  - Cosmetic achievements: Helt dolda tills unlock (överraskning)
+- **Era 2+ tabs:** Players, League, Academy, etc. läggs till när de låses upp

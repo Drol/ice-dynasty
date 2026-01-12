@@ -52,14 +52,59 @@ export interface Era {
   totalPrestiges: number;
 }
 
+export interface Morale {
+  level: number; // 0-100
+  maxLevel: number; // 100
+}
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string; // Hidden until unlocked
+  unlocked: boolean;
+  unlockedAt?: number; // timestamp
+  rewardType: 'bonus' | 'cosmetic';
+  bonusType?: 'winChance' | 'fanGain' | 'moneyGain' | 'trainingRate' | 'baseMoney' | 'clickPower' | 'all';
+  bonusValue?: number; // Multiplier or flat bonus
+  badge?: string; // For cosmetic rewards
+}
+
+export interface Challenge {
+  id: string;
+  name: string;
+  description: string;
+  restriction: string; // What's limited during the challenge
+  goal: string; // What you need to do to complete it
+  rewardDescription: string;
+  rewardType: 'fanGain' | 'trainingRate' | 'baseMoney' | 'clickPower' | 'winChance';
+  rewardValue: number;
+  unlockCondition: {
+    type: 'matchesPlayed' | 'fans' | 'money' | 'matchesWon';
+    value: number;
+  };
+  // Completion requirements
+  completionType: 'winMatches' | 'consecutiveWins' | 'winWithoutUpgrades';
+  completionValue: number;
+  // State
+  unlocked: boolean;
+  completed: boolean;
+  active: boolean;
+  // Progress tracking (while active)
+  progress: number;
+  startedAt?: number;
+}
+
 export interface GameState {
   version: number;
   club: Club | null;
   resources: Resources;
   training: Training;
+  morale: Morale;
   players: Player[];
   facilities: Facility[];
   upgrades: Upgrade[];
+  achievements: Achievement[];
+  challenges: Challenge[];
   era: Era;
   stats: GameStats;
   settings: GameSettings;
@@ -74,6 +119,11 @@ export interface GameStats {
   matchesPlayed: number;
   matchesWon: number;
   timePlayed: number; // seconds
+  consecutiveWins: number;
+  consecutiveLosses: number;
+  lastClickTime: number; // timestamp
+  clickTimestamps: number[]; // For tracking clicks in time windows
+  sessionMatchesPlayed: number; // Reset on page load
 }
 
 export interface GameSettings {
@@ -278,6 +328,228 @@ export const INITIAL_UPGRADES: Upgrade[] = [
   },
 ];
 
+export const INITIAL_ACHIEVEMENTS: Achievement[] = [
+  // Achievements with Permanent Bonuses
+  {
+    id: 'hot_streak',
+    name: 'Hot Streak',
+    description: 'Win 5 matches in a row',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'winChance',
+    bonusValue: 0.05, // +5% win chance
+  },
+  {
+    id: 'clutch_player',
+    name: 'Clutch Player',
+    description: 'Win a match with less than 45% win chance',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'winChance',
+    bonusValue: 0.03, // +3% win chance
+  },
+  {
+    id: 'the_comeback',
+    name: 'The Comeback',
+    description: 'Win after 5 losses in a row',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'fanGain',
+    bonusValue: 0.1, // +10% fan gain
+  },
+  {
+    id: 'century',
+    name: 'Century',
+    description: 'Win 100 matches',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'moneyGain',
+    bonusValue: 0.15, // +15% money from matches
+  },
+  {
+    id: 'devoted_coach',
+    name: 'Devoted Coach',
+    description: 'Accumulate 10,000 training minutes',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'trainingRate',
+    bonusValue: 0.1, // +10% training rate
+  },
+  {
+    id: 'sellout',
+    name: 'Sellout',
+    description: 'Earn $25,000 total',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'baseMoney',
+    bonusValue: 20, // +$20 base money
+  },
+  {
+    id: 'viral_moment',
+    name: 'Viral Moment',
+    description: 'Reach 5,000 fans',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'fanGain',
+    bonusValue: 0.25, // +25% fan gain
+  },
+  {
+    id: 'lucky_number',
+    name: 'Lucky Number',
+    description: 'Win a match 7-0',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'all',
+    bonusValue: 0.07, // +7% to everything (easter egg)
+  },
+
+  // Cosmetic Achievements
+  {
+    id: 'speed_demon',
+    name: 'Speed Demon',
+    description: 'Click 20 times in 3 seconds',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '⚡',
+  },
+  {
+    id: 'night_owl',
+    name: 'Night Owl',
+    description: 'Play between midnight and 4 AM',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '🌙',
+  },
+  {
+    id: 'hyperactive',
+    name: 'Hyperactive',
+    description: 'Click 100 times in 10 seconds',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '🌪️',
+  },
+  {
+    id: 'patience',
+    name: 'Patience',
+    description: 'Wait 5 minutes without clicking',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '🧘',
+  },
+  {
+    id: 'marathon_runner',
+    name: 'Marathon Runner',
+    description: 'Play 100 matches in a single session',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '🏃',
+  },
+  {
+    id: 'first_steps',
+    name: 'First Steps',
+    description: 'Create your club',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '👶',
+  },
+  {
+    id: 'first_blood',
+    name: 'First Blood',
+    description: 'Win your first match',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '🏆',
+  },
+];
+
+export const INITIAL_CHALLENGES: Challenge[] = [
+  {
+    id: 'rookie_mode',
+    name: 'Rookie Mode',
+    description: 'Play with a capped win chance to prove your fundamentals.',
+    restriction: 'Win chance capped at 50%',
+    goal: 'Win 10 matches',
+    rewardDescription: '+10% base fan gain permanently',
+    rewardType: 'fanGain',
+    rewardValue: 0.1,
+    unlockCondition: { type: 'matchesPlayed', value: 10 },
+    completionType: 'winMatches',
+    completionValue: 10,
+    unlocked: false,
+    completed: false,
+    active: false,
+    progress: 0,
+  },
+  {
+    id: 'fatigue_test',
+    name: 'Fatigue Test',
+    description: 'Survive without passive training income.',
+    restriction: 'No passive training (clicks only)',
+    goal: 'Win 5 matches',
+    rewardDescription: '+15% training rate permanently',
+    rewardType: 'trainingRate',
+    rewardValue: 0.15,
+    unlockCondition: { type: 'fans', value: 500 },
+    completionType: 'winMatches',
+    completionValue: 5,
+    unlocked: false,
+    completed: false,
+    active: false,
+    progress: 0,
+  },
+  {
+    id: 'budget_season',
+    name: 'Budget Season',
+    description: 'Play through a cash-strapped season.',
+    restriction: 'No money earned from matches',
+    goal: 'Win 10 matches',
+    rewardDescription: '+30% base money permanently',
+    rewardType: 'baseMoney',
+    rewardValue: 0.3,
+    unlockCondition: { type: 'money', value: 5000 },
+    completionType: 'winMatches',
+    completionValue: 10,
+    unlocked: false,
+    completed: false,
+    active: false,
+    progress: 0,
+  },
+  {
+    id: 'marathon',
+    name: 'Marathon',
+    description: 'Prove your consistency with a winning streak.',
+    restriction: 'Must win consecutively (resets on loss)',
+    goal: 'Win 5 matches in a row',
+    rewardDescription: '+20% click power permanently',
+    rewardType: 'clickPower',
+    rewardValue: 0.2,
+    unlockCondition: { type: 'matchesWon', value: 25 },
+    completionType: 'consecutiveWins',
+    completionValue: 5,
+    unlocked: false,
+    completed: false,
+    active: false,
+    progress: 0,
+  },
+  {
+    id: 'underdog',
+    name: 'Underdog',
+    description: 'Win without relying on click upgrades.',
+    restriction: 'Click upgrades disabled',
+    goal: 'Win 3 matches',
+    rewardDescription: '+5% win chance permanently',
+    rewardType: 'winChance',
+    rewardValue: 0.05,
+    unlockCondition: { type: 'matchesWon', value: 50 },
+    completionType: 'winWithoutUpgrades',
+    completionValue: 3,
+    unlocked: false,
+    completed: false,
+    active: false,
+    progress: 0,
+  },
+];
+
 export const INITIAL_GAME_STATE: GameState = {
   version: 1,
   club: null,
@@ -290,9 +562,15 @@ export const INITIAL_GAME_STATE: GameState = {
     minutesPerSecond: 1,
     totalMinutes: 0,
   },
+  morale: {
+    level: 0,
+    maxLevel: 100,
+  },
   players: [],
   facilities: [],
   upgrades: [...INITIAL_UPGRADES],
+  achievements: [...INITIAL_ACHIEVEMENTS],
+  challenges: [...INITIAL_CHALLENGES],
   era: {
     current: 1,
     points: 0,
@@ -304,6 +582,11 @@ export const INITIAL_GAME_STATE: GameState = {
     matchesPlayed: 0,
     matchesWon: 0,
     timePlayed: 0,
+    consecutiveWins: 0,
+    consecutiveLosses: 0,
+    lastClickTime: 0,
+    clickTimestamps: [],
+    sessionMatchesPlayed: 0,
   },
   settings: {
     notationsStyle: 'standard',
