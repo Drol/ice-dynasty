@@ -27,9 +27,10 @@ export function calculateTrainingRate(state: GameState): number {
   const baseRate = BASE_TRAINING_RATE;
   const eraMultiplier = getEraMultiplier(state.era);
   const upgradeBonus = getUpgradeBonus(state.upgrades, 'training');
+  const trainingMult = getUpgradeMultiplier(state.upgrades, 'trainingMult');
   const devMultiplier = state.dev.speedMultiplier;
 
-  return (baseRate + upgradeBonus) * eraMultiplier * devMultiplier;
+  return (baseRate + upgradeBonus) * eraMultiplier * trainingMult * devMultiplier;
 }
 
 /**
@@ -38,9 +39,10 @@ export function calculateTrainingRate(state: GameState): number {
 export function calculateClickPower(state: GameState): number {
   const basePower = BASE_CLICK_POWER;
   const upgradeBonus = getUpgradeBonus(state.upgrades, 'click');
+  const clickMult = getUpgradeMultiplier(state.upgrades, 'clickMult');
   const eraMultiplier = getEraMultiplier(state.era);
 
-  return (basePower + upgradeBonus) * eraMultiplier;
+  return (basePower + upgradeBonus) * clickMult * eraMultiplier;
 }
 
 /**
@@ -90,7 +92,8 @@ export function canAffordUpgrade(state: GameState, upgradeId: string): boolean {
 export function simulateMatch(state: GameState): MatchResult {
   // Base win chance starts at 40%, increases with training
   const trainingBonus = Math.min(0.3, state.training.totalMinutes / 10000);
-  const winChance = 0.4 + trainingBonus;
+  const winChanceBonus = getUpgradeBonus(state.upgrades, 'winChance');
+  const winChance = Math.min(0.9, 0.4 + trainingBonus + winChanceBonus);
 
   const won = Math.random() < winChance;
 
@@ -104,11 +107,18 @@ export function simulateMatch(state: GameState): MatchResult {
   // Calculate rewards
   const baseFanGain = won ? 15 : 5;
   const fanMultiplier = getUpgradeMultiplier(state.upgrades, 'fans');
-  const fansGained = Math.floor(baseFanGain * fanMultiplier * getEraMultiplier(state.era));
+  const comboMultiplier = getUpgradeMultiplier(state.upgrades, 'combo');
+  const fansGained = Math.floor(
+    baseFanGain * fanMultiplier * comboMultiplier * getEraMultiplier(state.era)
+  );
 
-  const baseMoneyGain = 50 + state.resources.fans * 2;
+  const baseMoneyAddition = getUpgradeBonus(state.upgrades, 'baseMoney');
+  const baseMoneyGain = 50 + baseMoneyAddition + state.resources.fans * 2;
   const moneyMultiplier = getUpgradeMultiplier(state.upgrades, 'money');
-  const moneyEarned = Math.floor(baseMoneyGain * moneyMultiplier * (won ? 1.5 : 1));
+  const winBonusMultiplier = won ? 1.5 + getUpgradeBonus(state.upgrades, 'winBonus') : 1;
+  const moneyEarned = Math.floor(
+    baseMoneyGain * moneyMultiplier * comboMultiplier * winBonusMultiplier
+  );
 
   return {
     won,

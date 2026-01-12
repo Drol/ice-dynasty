@@ -3,7 +3,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import type { GameState, MatchResult } from '$lib/game/types';
+import type { GameState, MatchResult, Upgrade } from '$lib/game/types';
 import { INITIAL_GAME_STATE, INITIAL_UPGRADES } from '$lib/game/types';
 import {
   calculateTrainingRate,
@@ -14,6 +14,30 @@ import {
 } from '$lib/game/formulas';
 
 const STORAGE_KEY = 'ice-dynasty-save';
+
+/**
+ * Check if an upgrade's unlock condition is met
+ */
+function isUpgradeUnlocked(upgrade: Upgrade, state: GameState): boolean {
+  if (!upgrade.unlockCondition) return true;
+
+  const { type, value } = upgrade.unlockCondition;
+
+  switch (type) {
+    case 'fans':
+      return state.resources.fans >= value;
+    case 'matchesPlayed':
+      return state.stats.matchesPlayed >= value;
+    case 'matchesWon':
+      return state.stats.matchesWon >= value;
+    case 'money':
+      return state.resources.money >= value;
+    case 'trainingMinutes':
+      return state.training.totalMinutes >= value;
+    default:
+      return true;
+  }
+}
 
 /**
  * Load game state from localStorage
@@ -27,6 +51,16 @@ function loadState(): GameState {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<GameState>;
+
+      // Merge upgrades: keep saved progress but add any new upgrades from INITIAL_UPGRADES
+      let mergedUpgrades = [...INITIAL_UPGRADES];
+      if (parsed.upgrades?.length) {
+        mergedUpgrades = INITIAL_UPGRADES.map((initialUpgrade) => {
+          const savedUpgrade = parsed.upgrades!.find((u) => u.id === initialUpgrade.id);
+          return savedUpgrade || initialUpgrade;
+        });
+      }
+
       // Merge with initial state to handle new fields
       return {
         ...INITIAL_GAME_STATE,
@@ -38,8 +72,7 @@ function loadState(): GameState {
         stats: { ...INITIAL_GAME_STATE.stats, ...parsed.stats },
         settings: { ...INITIAL_GAME_STATE.settings, ...parsed.settings },
         dev: { ...INITIAL_GAME_STATE.dev, ...parsed.dev },
-        // Ensure upgrades exist, use saved or initial
-        upgrades: parsed.upgrades?.length ? parsed.upgrades : [...INITIAL_UPGRADES],
+        upgrades: mergedUpgrades,
       };
     }
   } catch (e) {
@@ -325,4 +358,28 @@ export const clickPower = derived(gameState, ($state) =>
 export const totalMinutes = derived(
   gameState,
   ($state) => $state.training.totalMinutes
+);
+
+/**
+ * All upgrades with their unlock status
+ */
+export const upgradesWithStatus = derived(gameState, ($state) =>
+  $state.upgrades.map((upgrade) => ({
+    ...upgrade,
+    isUnlocked: isUpgradeUnlocked(upgrade, $state),
+  }))
+);
+
+/**
+ * Only upgrades that are unlocked or have no unlock condition
+ */
+export const visibleUpgrades = derived(upgradesWithStatus, ($upgrades) =>
+  $upgrades.filter((u) => u.isUnlocked)
+);
+
+/**
+ * Upgrades that are locked with their unlock requirements
+ */
+export const lockedUpgrades = derived(upgradesWithStatus, ($upgrades) =>
+  $upgrades.filter((u) => !u.isUnlocked)
 );
