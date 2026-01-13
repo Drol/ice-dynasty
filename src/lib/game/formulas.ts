@@ -3,23 +3,17 @@
  * All game math is centralized here for easy balancing
  */
 
-import type { GameState, Era, Upgrade, MatchResult, TrainingType, MatchTactic } from './types';
+import type { GameState, Era, Upgrade, MatchResult, MatchTactic, ReputationUpgrade, Challenge } from './types';
 
 /**
- * Base conditioning per second when starting
+ * Base training per second when starting
  */
-export const BASE_CONDITIONING_RATE = 1;
+export const BASE_TRAINING_RATE = 1;
 
 /**
- * Base click power (conditioning per click)
+ * Base click power (training per click)
  */
 export const BASE_CLICK_POWER = 1;
-
-/**
- * Base cascade rate (10% per second)
- * Conditioning -> Skating -> Shooting
- */
-export const BASE_CASCADE_RATE = 0.1;
 
 /**
  * Match cooldown in milliseconds (30 seconds base)
@@ -61,79 +55,67 @@ export function calculateMoraleCost(currentLevel: number): number {
 }
 
 /**
- * Calculate conditioning generated per second (base training rate)
+ * Calculate training generated per second
  */
-export function calculateConditioningRate(state: GameState): number {
-  const baseRate = BASE_CONDITIONING_RATE;
+export function calculateTrainingRate(state: GameState): number {
+  const baseRate = BASE_TRAINING_RATE;
   const eraMultiplier = getEraMultiplier(state.era);
-  const upgradeBonus = getUpgradeBonusForType(state.upgrades, 'training', 'conditioning');
+  const upgradeBonus = getUpgradeBonus(state.upgrades, 'training');
   const trainingMult = getUpgradeMultiplier(state.upgrades, 'trainingMult');
   const moraleMult = getMoraleMultiplier(state.morale);
   const devMultiplier = state.dev.speedMultiplier;
 
-  return (baseRate + upgradeBonus) * eraMultiplier * trainingMult * moraleMult * devMultiplier;
+  // Reputation upgrade bonus (permanent)
+  const repTrainingBonus = 1 + getReputationUpgradeBonus(state.reputationUpgrades, 'trainingRate');
+
+  // Challenge reward bonus (permanent)
+  const challengeTrainingBonus = 1 + getChallengeBonus(state.challenges, 'trainingRate');
+
+  return (baseRate + upgradeBonus) * eraMultiplier * trainingMult * moraleMult * devMultiplier * repTrainingBonus * challengeTrainingBonus;
 }
 
 /**
- * Legacy function for backward compatibility
+ * Base passive income rate per fan per second
+ * Each fan generates $0.1 per second base
  */
-export function calculateTrainingRate(state: GameState): number {
-  return calculateConditioningRate(state);
+export const BASE_INCOME_PER_FAN = 0.1;
+
+/**
+ * Calculate passive money income per second from fans
+ * This is the economy cascade: Fans → Money
+ */
+export function calculatePassiveIncome(state: GameState): number {
+  const fans = state.resources.fans;
+  if (fans <= 0) return 0;
+
+  const baseIncome = fans * BASE_INCOME_PER_FAN;
+  const moneyMultiplier = getUpgradeMultiplier(state.upgrades, 'money');
+  const eraMultiplier = getEraMultiplier(state.era);
+  const devMultiplier = state.dev.speedMultiplier;
+
+  // Reputation upgrade bonus (permanent)
+  const repIncomeBonus = 1 + getReputationUpgradeBonus(state.reputationUpgrades, 'incomeRate');
+
+  return baseIncome * moneyMultiplier * eraMultiplier * devMultiplier * repIncomeBonus;
 }
 
 /**
- * Calculate conditioning gained per click
+ * Calculate training gained per click
  */
 export function calculateClickPower(state: GameState): number {
   const basePower = BASE_CLICK_POWER;
-  const upgradeBonus = getUpgradeBonusForType(state.upgrades, 'click', 'conditioning');
+  const upgradeBonus = getUpgradeBonus(state.upgrades, 'click');
   const clickMult = getUpgradeMultiplier(state.upgrades, 'clickMult');
   const eraMultiplier = getEraMultiplier(state.era);
   const moraleMult = getMoraleMultiplier(state.morale);
 
-  return (basePower + upgradeBonus) * clickMult * eraMultiplier * moraleMult;
-}
+  // Reputation upgrade bonus (permanent)
+  const repClickBonus = 1 + getReputationUpgradeBonus(state.reputationUpgrades, 'clickPower');
 
-/**
- * Calculate cascade rates (how fast training types convert to the next tier)
- */
-export function calculateCascadeRates(state: GameState): {
-  conditioningToSkating: number;
-  skatingToShooting: number;
-} {
-  const baseRate = BASE_CASCADE_RATE;
-  const devMultiplier = state.dev.speedMultiplier;
+  // Challenge reward bonus (permanent)
+  const challengeClickBonus = 1 + getChallengeBonus(state.challenges, 'clickPower');
 
-  // Get cascade bonuses from upgrades
-  const condToSkateCascade = 1 + getCascadeBonus(state.upgrades, 'skating');
-  const skateToShootCascade = 1 + getCascadeBonus(state.upgrades, 'shooting');
-
-  return {
-    conditioningToSkating: baseRate * condToSkateCascade * devMultiplier,
-    skatingToShooting: baseRate * skateToShootCascade * devMultiplier,
-  };
-}
-
-/**
- * Get cascade bonus from upgrades affecting a specific training type
- */
-export function getCascadeBonus(upgrades: Upgrade[], targetType: TrainingType): number {
-  return upgrades
-    .filter((u) => u.type === 'cascade' && u.affectsType === targetType)
-    .reduce((total, u) => total + u.level * u.effect, 0);
-}
-
-/**
- * Get upgrade bonus for a specific upgrade type that affects a specific training type
- */
-export function getUpgradeBonusForType(
-  upgrades: Upgrade[],
-  upgradeType: Upgrade['type'],
-  trainingType: TrainingType
-): number {
-  return upgrades
-    .filter((u) => u.type === upgradeType && (!u.affectsType || u.affectsType === trainingType))
-    .reduce((total, u) => total + u.level * u.effect, 0);
+  return (basePower + upgradeBonus) * clickMult * eraMultiplier * moraleMult * repClickBonus * challengeClickBonus;
 }
 
 /**
@@ -169,51 +151,36 @@ export function calculateUpgradeCost(upgrade: Upgrade): number {
 }
 
 /**
- * Get the training amount for a specific cost type
- */
-export function getTrainingForCostType(state: GameState, costType: TrainingType | undefined): number {
-  const type = costType || 'conditioning'; // Default to conditioning
-  return state.training[type];
-}
-
-/**
- * Check if player can afford an upgrade (using the correct training type)
+ * Check if player can afford an upgrade
  */
 export function canAffordUpgrade(state: GameState, upgradeId: string): boolean {
   const upgrade = state.upgrades.find((u) => u.id === upgradeId);
   if (!upgrade || upgrade.level >= upgrade.maxLevel) return false;
 
   const cost = calculateUpgradeCost(upgrade);
-  const available = getTrainingForCostType(state, upgrade.costType);
-
-  return available >= cost;
+  return state.training.minutes >= cost;
 }
 
 /**
- * Calculate shooting win chance bonus (+1% per 100 shooting, max 20%)
- */
-export function getShootingWinBonus(shooting: number): number {
-  return Math.min(0.2, shooting / 10000);
-}
-
-/**
- * Calculate current win chance (without challenge modifications)
- * Now includes shooting bonus and tactic modifiers
+ * Calculate current win chance (without active challenge modifications)
  */
 export function calculateWinChance(state: GameState): number {
-  const trainingBonus = Math.min(0.3, state.training.totalMinutes / 10000);
-  const shootingBonus = getShootingWinBonus(state.training.shooting);
+  const trainingBonus = Math.min(0.3, state.training.minutes / 10000);
   const winChanceBonus = getUpgradeBonus(state.upgrades, 'winChance');
-  const shootingUpgradeBonus = getUpgradeBonus(state.upgrades, 'shootingWinChance');
   const moraleBonus = Math.floor(state.morale.level / 20) * 0.01; // +1% per 20 levels
   const tacticBonus = TACTIC_MODIFIERS[state.currentTactic].winChance;
 
-  return Math.min(0.9, Math.max(0.1, 0.4 + trainingBonus + shootingBonus + winChanceBonus + shootingUpgradeBonus + moraleBonus + tacticBonus));
+  // Reputation upgrade bonus (permanent)
+  const repWinBonus = getReputationUpgradeBonus(state.reputationUpgrades, 'winChance');
+
+  // Challenge reward bonus (permanent)
+  const challengeWinBonus = getChallengeBonus(state.challenges, 'winChance');
+
+  return Math.min(0.9, Math.max(0.1, 0.4 + trainingBonus + winChanceBonus + moraleBonus + tacticBonus + repWinBonus + challengeWinBonus));
 }
 
 /**
  * Simulate a match and return results
- * Now includes tactic modifiers for rewards
  */
 export function simulateMatch(state: GameState): MatchResult {
   // Get win chance with all bonuses
@@ -230,12 +197,16 @@ export function simulateMatch(state: GameState): MatchResult {
   // Get tactic modifiers
   const tactic = TACTIC_MODIFIERS[state.currentTactic];
 
+  // Challenge reward bonuses (permanent)
+  const challengeFanBonus = 1 + getChallengeBonus(state.challenges, 'fanGain');
+  const challengeMoneyBonus = 1 + getChallengeBonus(state.challenges, 'baseMoney');
+
   // Calculate rewards with tactic modifiers
   const baseFanGain = won ? 15 : 5;
   const fanMultiplier = getUpgradeMultiplier(state.upgrades, 'fans');
   const comboMultiplier = getUpgradeMultiplier(state.upgrades, 'combo');
   const fansGained = Math.floor(
-    baseFanGain * fanMultiplier * comboMultiplier * tactic.fanGain * getEraMultiplier(state.era)
+    baseFanGain * fanMultiplier * comboMultiplier * tactic.fanGain * getEraMultiplier(state.era) * challengeFanBonus
   );
 
   const baseMoneyAddition = getUpgradeBonus(state.upgrades, 'baseMoney');
@@ -243,7 +214,7 @@ export function simulateMatch(state: GameState): MatchResult {
   const moneyMultiplier = getUpgradeMultiplier(state.upgrades, 'money');
   const winBonusMultiplier = won ? 1.5 + getUpgradeBonus(state.upgrades, 'winBonus') : 1;
   const moneyEarned = Math.floor(
-    baseMoneyGain * moneyMultiplier * comboMultiplier * winBonusMultiplier * tactic.money
+    baseMoneyGain * moneyMultiplier * comboMultiplier * winBonusMultiplier * tactic.money * challengeMoneyBonus
   );
 
   return {
@@ -290,4 +261,76 @@ export function canPrestige(state: GameState): boolean {
   // Require minimum fans to prestige
   const minimumFans = 1000 * Math.pow(10, state.era.totalPrestiges);
   return state.resources.fans >= minimumFans;
+}
+
+// ========== REPUTATION UPGRADE HELPERS ==========
+
+/**
+ * Get bonus value from purchased reputation upgrades of a specific type
+ */
+export function getReputationUpgradeBonus(
+  repUpgrades: ReputationUpgrade[],
+  effectType: ReputationUpgrade['effect']['type']
+): number {
+  return repUpgrades
+    .filter((u) => u.purchased && u.effect.type === effectType)
+    .reduce((total, u) => total + u.effect.value, 0);
+}
+
+/**
+ * Get starting fans from reputation upgrades
+ */
+export function getStartingFans(state: GameState): number {
+  return getReputationUpgradeBonus(state.reputationUpgrades, 'startFans');
+}
+
+/**
+ * Get starting money from reputation upgrades
+ */
+export function getStartingMoney(state: GameState): number {
+  return getReputationUpgradeBonus(state.reputationUpgrades, 'startMoney');
+}
+
+// ========== CHALLENGE REWARD HELPERS ==========
+
+/**
+ * Get bonus value from completed challenges of a specific reward type
+ */
+export function getChallengeBonus(
+  challenges: Challenge[],
+  rewardType: Challenge['rewardType']
+): number {
+  return challenges
+    .filter((c) => c.completed && c.rewardType === rewardType)
+    .reduce((total, c) => total + c.rewardValue, 0);
+}
+
+// ========== SEASON SYSTEM ==========
+
+/**
+ * Calculate reputation earned when ending a season
+ * Based on: wins, fans, and season speed
+ */
+export function calculateReputationGain(state: GameState): number {
+  const winFactor = Math.sqrt(state.season.wins);
+  const fanFactor = Math.log10(Math.max(1, state.resources.fans));
+
+  // Bonus for completing season quickly (under 5 real minutes = 300 seconds, adjusted for speed)
+  const seasonDuration = (Date.now() - state.season.startTime) / 1000;
+  const adjustedDuration = seasonDuration * state.dev.speedMultiplier; // Account for speed
+  const speedBonus = adjustedDuration < 300 ? 1.5 : 1;
+
+  // Reputation upgrade bonus
+  const repGainBonus = 1 + getReputationUpgradeBonus(state.reputationUpgrades, 'reputationGain');
+
+  const baseGain = winFactor * fanFactor * speedBonus * repGainBonus;
+
+  return Math.max(1, Math.floor(baseGain));
+}
+
+/**
+ * Check if player can end the current season (has reached goal)
+ */
+export function canEndSeason(state: GameState): boolean {
+  return state.season.wins >= state.season.goalWins;
 }

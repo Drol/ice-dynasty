@@ -3,7 +3,7 @@
 
   const game = $derived($gameState);
 
-  const speeds = [1, 2, 5, 10, 100];
+  const speeds = [1, 2, 5, 10, 100, 1000];
 
   function handleReset() {
     if (confirm('Are you sure you want to reset all progress?')) {

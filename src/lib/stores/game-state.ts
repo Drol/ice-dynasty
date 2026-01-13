@@ -3,20 +3,22 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import type { GameState, MatchResult, Upgrade, Achievement, Challenge, MatchTactic } from '$lib/game/types';
-import { INITIAL_GAME_STATE, INITIAL_UPGRADES, INITIAL_ACHIEVEMENTS, INITIAL_CHALLENGES } from '$lib/game/types';
+import type { GameState, MatchResult, Upgrade, Achievement, Challenge, MatchTactic, ReputationUpgrade } from '$lib/game/types';
+import { INITIAL_GAME_STATE, INITIAL_UPGRADES, INITIAL_ACHIEVEMENTS, INITIAL_CHALLENGES, INITIAL_REPUTATION_UPGRADES, getSeasonGoal } from '$lib/game/types';
 import {
   calculateTrainingRate,
-  calculateConditioningRate,
-  calculateCascadeRates,
+  calculatePassiveIncome,
   calculateClickPower,
   calculateUpgradeCost,
-  getTrainingForCostType,
   calculateMoraleCost,
   getMoraleMultiplier,
   calculateWinChance,
   simulateMatch,
   canPlayMatch,
+  calculateReputationGain,
+  canEndSeason,
+  getStartingFans,
+  getStartingMoney,
 } from '$lib/game/formulas';
 
 const STORAGE_KEY = 'ice-dynasty-save';
@@ -39,11 +41,7 @@ function isUpgradeUnlocked(upgrade: Upgrade, state: GameState): boolean {
     case 'money':
       return state.resources.money >= value;
     case 'trainingMinutes':
-      return state.training.totalMinutes >= value;
-    case 'skating':
-      return state.training.skating >= value;
-    case 'shooting':
-      return state.training.shooting >= value;
+      return state.training.minutes >= value;
     default:
       return true;
   }
@@ -81,7 +79,7 @@ function checkAchievements(state: GameState, context?: {
         shouldUnlock = state.stats.matchesWon >= 100;
         break;
       case 'devoted_coach':
-        shouldUnlock = state.training.totalMinutes >= 10000;
+        shouldUnlock = state.training.minutes >= 10000;
         break;
       case 'sellout':
         shouldUnlock = state.stats.totalMoneyEarned >= 25000;
@@ -206,20 +204,44 @@ function loadState(): GameState {
         });
       }
 
-      // Migrate old training format (version 1) to new format (version 2)
-      let migratedTraining = { ...INITIAL_GAME_STATE.training, ...parsed.training };
-      if (parsed.training && !('conditioning' in parsed.training)) {
-        // Old format: { minutesPerSecond, totalMinutes }
-        const oldTotal = (parsed.training as { totalMinutes?: number }).totalMinutes || 0;
-        migratedTraining = {
-          conditioning: oldTotal * 0.6,
-          skating: oldTotal * 0.3,
-          shooting: oldTotal * 0.1,
-          totalMinutes: oldTotal,
-        };
+      // Merge reputation upgrades: keep purchased status but add any new upgrades
+      let mergedRepUpgrades = [...INITIAL_REPUTATION_UPGRADES];
+      if (parsed.reputationUpgrades?.length) {
+        mergedRepUpgrades = INITIAL_REPUTATION_UPGRADES.map((initialUpgrade) => {
+          const savedUpgrade = parsed.reputationUpgrades!.find((u) => u.id === initialUpgrade.id);
+          return savedUpgrade || initialUpgrade;
+        });
       }
 
-      // Ensure currentTactic exists (new in version 2)
+      // Ensure season exists (migrate from older saves)
+      const migratedSeason = parsed.season || {
+        number: 1,
+        wins: 0,
+        losses: 0,
+        startTime: Date.now(),
+        goalWins: 10,
+        completed: false,
+      };
+
+      // Migrate old training format to new simplified format
+      let migratedTraining = { minutes: 0 };
+      if (parsed.training) {
+        if ('minutes' in parsed.training) {
+          // Already in new format
+          migratedTraining = { minutes: parsed.training.minutes };
+        } else if ('totalMinutes' in parsed.training) {
+          // Old format with totalMinutes
+          migratedTraining = { minutes: (parsed.training as { totalMinutes: number }).totalMinutes };
+        } else if ('conditioning' in parsed.training) {
+          // Old cascade format - sum all types
+          const oldTraining = parsed.training as { conditioning?: number; skating?: number; shooting?: number };
+          migratedTraining = {
+            minutes: (oldTraining.conditioning || 0) + (oldTraining.skating || 0) + (oldTraining.shooting || 0)
+          };
+        }
+      }
+
+      // Ensure currentTactic exists
       const currentTactic = parsed.currentTactic || 'balanced';
 
       // Merge with initial state to handle new fields
@@ -231,6 +253,7 @@ function loadState(): GameState {
         training: migratedTraining,
         morale: { ...INITIAL_GAME_STATE.morale, ...parsed.morale },
         currentTactic,
+        season: migratedSeason,
         era: { ...INITIAL_GAME_STATE.era, ...parsed.era },
         stats: { ...INITIAL_GAME_STATE.stats, ...parsed.stats },
         settings: { ...INITIAL_GAME_STATE.settings, ...parsed.settings },
@@ -238,6 +261,7 @@ function loadState(): GameState {
         upgrades: mergedUpgrades,
         achievements: mergedAchievements,
         challenges: mergedChallenges,
+        reputationUpgrades: mergedRepUpgrades,
       };
     }
   } catch (e) {
@@ -311,8 +335,7 @@ function createGameStore() {
             return {
               ...state,
               training: {
-                ...state.training,
-                totalMinutes: state.training.totalMinutes + offlineMinutes,
+                minutes: state.training.minutes + offlineMinutes,
               },
               lastTick: now,
             };
@@ -344,16 +367,21 @@ function createGameStore() {
           },
         },
         training: {
-          conditioning: 0,
-          skating: 0,
-          shooting: 0,
-          totalMinutes: 0,
+          minutes: 0,
         },
         currentTactic: 'balanced',
         resources: {
           ...state.resources,
           fans: 10,
           money: 0,
+        },
+        season: {
+          number: 1,
+          wins: 0,
+          losses: 0,
+          startTime: Date.now(),
+          goalWins: 10,
+          completed: false,
         },
         upgrades: [...INITIAL_UPGRADES],
         lastTick: Date.now(),
@@ -370,7 +398,7 @@ function createGameStore() {
 
     /**
      * Game tick - called every frame
-     * Handles conditioning generation and cascade system
+     * Handles passive training generation
      */
     tick(deltaSeconds: number) {
       update((state) => {
@@ -379,35 +407,29 @@ function createGameStore() {
         // Check for active challenge restrictions
         const activeChallenge = getActiveChallenge(state);
         const hasPassiveTraining = activeChallenge?.id !== 'fatigue_test';
+        const hasPassiveIncome = activeChallenge?.id !== 'budget_season';
 
-        // Calculate conditioning gained this tick
-        const conditioningRate = hasPassiveTraining ? calculateConditioningRate(state) : 0;
-        const conditioningGained = conditioningRate * deltaSeconds;
+        // Calculate training gained this tick
+        const trainingRate = hasPassiveTraining ? calculateTrainingRate(state) : 0;
+        const trainingGained = trainingRate * deltaSeconds;
 
-        // Calculate cascade rates
-        const cascadeRates = calculateCascadeRates(state);
-
-        // Calculate cascade amounts (percentage of current amount per second)
-        const conditioningToSkating = state.training.conditioning * cascadeRates.conditioningToSkating * deltaSeconds;
-        const skatingToShooting = state.training.skating * cascadeRates.skatingToShooting * deltaSeconds;
-
-        // Update training amounts
-        const newConditioning = state.training.conditioning + conditioningGained - conditioningToSkating;
-        const newSkating = state.training.skating + conditioningToSkating - skatingToShooting;
-        const newShooting = state.training.shooting + skatingToShooting;
-        const newTotal = newConditioning + newSkating + newShooting;
+        // Calculate passive income from fans (economy cascade)
+        const incomeRate = hasPassiveIncome ? calculatePassiveIncome(state) : 0;
+        const incomeGained = incomeRate * deltaSeconds;
 
         return {
           ...state,
           training: {
-            conditioning: Math.max(0, newConditioning),
-            skating: Math.max(0, newSkating),
-            shooting: Math.max(0, newShooting),
-            totalMinutes: newTotal,
+            minutes: state.training.minutes + trainingGained,
+          },
+          resources: {
+            ...state.resources,
+            money: state.resources.money + incomeGained,
           },
           stats: {
             ...state.stats,
             timePlayed: state.stats.timePlayed + deltaSeconds,
+            totalMoneyEarned: state.stats.totalMoneyEarned + incomeGained,
           },
           lastTick: Date.now(),
         };
@@ -447,16 +469,10 @@ function createGameStore() {
           t => now - t <= 10000
         );
 
-        // Add to conditioning (will cascade to skating and shooting)
-        const newConditioning = state.training.conditioning + clickPower;
-        const newTotal = newConditioning + state.training.skating + state.training.shooting;
-
         return {
           ...state,
           training: {
-            ...state.training,
-            conditioning: newConditioning,
-            totalMinutes: newTotal,
+            minutes: state.training.minutes + clickPower,
           },
           stats: {
             ...state.stats,
@@ -486,23 +502,18 @@ function createGameStore() {
         if (upgrade.level >= upgrade.maxLevel) return state;
 
         const cost = calculateUpgradeCost(upgrade);
-        const costType = upgrade.costType || 'conditioning';
-        const available = getTrainingForCostType(state, costType);
 
-        if (available < cost) return state;
+        if (state.training.minutes < cost) return state;
 
         success = true;
         const newUpgrades = [...state.upgrades];
         newUpgrades[upgradeIndex] = { ...upgrade, level: upgrade.level + 1 };
 
-        // Deduct from the correct training type
-        const newTraining = { ...state.training };
-        newTraining[costType] -= cost;
-        newTraining.totalMinutes = newTraining.conditioning + newTraining.skating + newTraining.shooting;
-
         return {
           ...state,
-          training: newTraining,
+          training: {
+            minutes: state.training.minutes - cost,
+          },
           upgrades: newUpgrades,
         };
       });
@@ -520,11 +531,11 @@ function createGameStore() {
 
       const activeChallenge = getActiveChallenge(state);
 
-      // Calculate win chance for achievement checking (duplicates logic from simulateMatch)
-      const trainingBonus = Math.min(0.3, state.training.totalMinutes / 10000);
+      // Calculate win chance for achievement checking
       const winChanceFromUpgrades = state.upgrades
         .filter((u) => u.type === 'winChance')
         .reduce((total, u) => total + u.level * u.effect, 0);
+      const trainingBonus = Math.min(0.3, state.training.minutes / 10000);
       const moraleBonus = Math.floor(state.morale.level / 20) * 0.01;
       let winChance = Math.min(0.9, 0.4 + trainingBonus + winChanceFromUpgrades + moraleBonus);
 
@@ -596,12 +607,23 @@ function createGameStore() {
           });
         }
 
+        // Update season wins/losses
+        const newSeasonWins = s.season.wins + (result.won ? 1 : 0);
+        const newSeasonLosses = s.season.losses + (result.won ? 0 : 1);
+        const seasonCompleted = newSeasonWins >= s.season.goalWins;
+
         return {
           ...s,
           resources: {
             ...s.resources,
             fans: s.resources.fans + result.fansGained,
             money: s.resources.money + moneyEarned,
+          },
+          season: {
+            ...s.season,
+            wins: newSeasonWins,
+            losses: newSeasonLosses,
+            completed: seasonCompleted,
           },
           stats: {
             ...s.stats,
@@ -707,6 +729,107 @@ function createGameStore() {
 
       this.save();
       return true;
+    },
+
+    /**
+     * End the current season and start a new one
+     * Returns the reputation gained
+     */
+    endSeason(): number {
+      const state = get({ subscribe });
+      if (!canEndSeason(state)) return 0;
+
+      const reputationGained = calculateReputationGain(state);
+
+      // Calculate season duration for stats
+      const seasonDuration = (Date.now() - state.season.startTime) / 1000;
+      const fastestSeason = Math.min(state.stats.fastestSeason, seasonDuration);
+
+      // Get starting resources from reputation upgrades
+      const startFans = Math.max(10, getStartingFans(state));
+      const startMoney = getStartingMoney(state);
+
+      // Calculate next season goal
+      const nextSeasonNumber = state.season.number + 1;
+      const nextGoalWins = getSeasonGoal(nextSeasonNumber);
+
+      update((s) => ({
+        ...s,
+        // Reset resources (but keep reputation)
+        resources: {
+          fans: startFans,
+          money: startMoney,
+          reputation: s.resources.reputation + reputationGained,
+        },
+        // Reset training
+        training: {
+          minutes: 0,
+        },
+        // Reset morale
+        morale: {
+          level: 0,
+          maxLevel: 100,
+        },
+        // Start new season
+        season: {
+          number: nextSeasonNumber,
+          wins: 0,
+          losses: 0,
+          startTime: Date.now(),
+          goalWins: nextGoalWins,
+          completed: false,
+        },
+        // Reset season upgrades to initial levels
+        upgrades: [...INITIAL_UPGRADES],
+        // Abandon any active challenge
+        challenges: s.challenges.map((c) =>
+          c.active ? { ...c, active: false, progress: 0, startedAt: undefined } : c
+        ),
+        // Update stats
+        stats: {
+          ...s.stats,
+          totalSeasons: s.stats.totalSeasons + 1,
+          fastestSeason,
+          totalReputationEarned: s.stats.totalReputationEarned + reputationGained,
+        },
+        // Reset match cooldown
+        lastMatchTime: 0,
+      }));
+
+      this.save();
+      return reputationGained;
+    },
+
+    /**
+     * Buy a reputation upgrade
+     */
+    buyReputationUpgrade(upgradeId: string): boolean {
+      let success = false;
+
+      update((state) => {
+        const upgradeIndex = state.reputationUpgrades.findIndex((u) => u.id === upgradeId);
+        if (upgradeIndex === -1) return state;
+
+        const upgrade = state.reputationUpgrades[upgradeIndex];
+        if (upgrade.purchased) return state;
+        if (state.resources.reputation < upgrade.cost) return state;
+
+        success = true;
+        const newUpgrades = [...state.reputationUpgrades];
+        newUpgrades[upgradeIndex] = { ...upgrade, purchased: true };
+
+        return {
+          ...state,
+          resources: {
+            ...state.resources,
+            reputation: state.resources.reputation - upgrade.cost,
+          },
+          reputationUpgrades: newUpgrades,
+        };
+      });
+
+      if (success) this.save();
+      return success;
     },
 
     /**
@@ -818,7 +941,7 @@ export const clickPower = derived(gameState, ($state) =>
 
 export const totalMinutes = derived(
   gameState,
-  ($state) => $state.training.totalMinutes
+  ($state) => $state.training.minutes
 );
 
 /**
@@ -855,7 +978,7 @@ export const MATCH_UNLOCK_THRESHOLD = 100;
  */
 export const matchesUnlocked = derived(
   gameState,
-  ($state) => $state.training.totalMinutes >= MATCH_UNLOCK_THRESHOLD
+  ($state) => $state.training.minutes >= MATCH_UNLOCK_THRESHOLD
 );
 
 /**
@@ -918,11 +1041,51 @@ export const availableChallenges = derived(challengesWithStatus, ($challenges) =
 export const currentTactic = derived(gameState, ($state) => $state.currentTactic);
 
 /**
- * Current cascade rates
+ * Passive income rate (money per second from fans)
  */
-export const cascadeRates = derived(gameState, ($state) => calculateCascadeRates($state));
+export const passiveIncomeRate = derived(gameState, ($state) =>
+  calculatePassiveIncome($state)
+);
+
+// ========== SEASON DERIVED STORES ==========
 
 /**
- * Conditioning rate (per second)
+ * Current season info
  */
-export const conditioningRate = derived(gameState, ($state) => calculateConditioningRate($state));
+export const currentSeason = derived(gameState, ($state) => $state.season);
+
+/**
+ * Whether the season goal has been reached
+ */
+export const seasonCompleted = derived(gameState, ($state) => canEndSeason($state));
+
+/**
+ * Season progress (wins / goal)
+ */
+export const seasonProgress = derived(gameState, ($state) => ({
+  wins: $state.season.wins,
+  goal: $state.season.goalWins,
+  percentage: Math.min(100, ($state.season.wins / $state.season.goalWins) * 100),
+}));
+
+/**
+ * Reputation to be gained if season ends now
+ */
+export const potentialReputationGain = derived(gameState, ($state) =>
+  canEndSeason($state) ? calculateReputationGain($state) : 0
+);
+
+/**
+ * Current reputation amount
+ */
+export const currentReputation = derived(gameState, ($state) => $state.resources.reputation);
+
+/**
+ * Reputation upgrades with affordability status
+ */
+export const reputationUpgradesWithStatus = derived(gameState, ($state) =>
+  $state.reputationUpgrades.map((upgrade) => ({
+    ...upgrade,
+    canAfford: $state.resources.reputation >= upgrade.cost,
+  }))
+);

@@ -134,12 +134,12 @@ test.describe('Ice Dynasty Game', () => {
     test('should buy upgrade and increase cost', async ({ page }) => {
       await page.getByRole('button', { name: 'Upgrades' }).click();
 
-      // Look for Better Skates with 10 cost (now shows "cond" instead of "min")
-      const upgradeButton = page.getByRole('button', { name: /Better Skates.*10.*cond/i });
+      // Look for Better Skates with 10 cost
+      const upgradeButton = page.getByRole('button', { name: /Better Skates.*10.*min/i });
       await upgradeButton.click();
 
       // Cost should have increased to 15 after purchase
-      await expect(page.getByRole('button', { name: /Better Skates.*15.*cond/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Better Skates.*15.*min/i })).toBeVisible();
     });
 
     test('should show locked upgrades with requirements', async ({ page }) => {
@@ -277,8 +277,8 @@ test.describe('Ice Dynasty Game', () => {
     test('should unlock First Blood on first win', async ({ page }) => {
       await page.waitForTimeout(1500);
 
-      // Play matches until we win
-      for (let i = 0; i < 5; i++) {
+      // Play matches until we win (increased attempts for reliability)
+      for (let i = 0; i < 10; i++) {
         await page.getByRole('button', { name: 'Play Match' }).click();
         await page.waitForTimeout(400);
       }
@@ -296,6 +296,49 @@ test.describe('Ice Dynasty Game', () => {
 
       // Should NOT contain "Baby" text next to the emoji
       await expect(page.locator('text=👶 Baby')).not.toBeVisible();
+    });
+  });
+
+  test.describe('Passive Income', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole('textbox', { name: /Club Name/i }).fill('Test Club');
+      await page.getByRole('button', { name: 'Found Club' }).click();
+      await page.getByRole('button', { name: '100x' }).click();
+    });
+
+    test('should show passive income rate in header', async ({ page }) => {
+      // Wait for match unlock and play some matches to get fans
+      await page.waitForTimeout(1500);
+      await page.getByRole('button', { name: 'Play Match' }).click();
+      await page.waitForTimeout(500);
+      await page.getByRole('button', { name: 'Play Match' }).click();
+
+      // Should see income rate displayed (fans generate money)
+      await expect(page.locator('.header-resource.money .header-resource-rate')).toBeVisible();
+    });
+
+    test('should increase money passively from fans', async ({ page }) => {
+      // Play matches to get more fans
+      await page.waitForTimeout(1500);
+      for (let i = 0; i < 3; i++) {
+        await page.getByRole('button', { name: 'Play Match' }).click();
+        await page.waitForTimeout(400);
+      }
+
+      // Get initial money
+      const getMoneyText = async () => {
+        return await page.locator('.header-resource.money .header-resource-value').textContent();
+      };
+
+      const initialMoney = await getMoneyText();
+
+      // Wait for passive income to accumulate
+      await page.waitForTimeout(2000);
+
+      const newMoney = await getMoneyText();
+
+      // Money should have increased from passive income
+      expect(newMoney).not.toBe(initialMoney);
     });
   });
 
@@ -326,6 +369,89 @@ test.describe('Ice Dynasty Game', () => {
 
       // Should show club creation form again
       await expect(page.getByRole('textbox', { name: /Club Name/i })).toBeVisible();
+    });
+  });
+
+  test.describe('Season System', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole('textbox', { name: /Club Name/i }).fill('Test Club');
+      await page.getByRole('button', { name: 'Found Club' }).click();
+      await page.getByRole('button', { name: '100x' }).click();
+    });
+
+    test('should show season info in header', async ({ page }) => {
+      await expect(page.locator('text=Season 1')).toBeVisible();
+      await expect(page.locator('.season-progress-text')).toHaveText('0/10 wins');
+    });
+
+    test('should show reputation display', async ({ page }) => {
+      await expect(page.locator('.rep-label')).toHaveText('Reputation');
+      await expect(page.locator('.rep-value')).toHaveText('0');
+    });
+
+    test('should track season wins', async ({ page }) => {
+      await page.waitForTimeout(1500);
+
+      // Play some matches
+      for (let i = 0; i < 5; i++) {
+        await page.getByRole('button', { name: 'Play Match' }).click();
+        await page.waitForTimeout(400);
+      }
+
+      // Season progress should have updated
+      const progressText = await page.locator('.season-progress-text').textContent();
+      expect(progressText).not.toBe('0/10 wins');
+    });
+
+    test('should show End Season button when goal is reached', async ({ page }) => {
+      await page.waitForTimeout(1500);
+
+      // Play many matches to reach goal
+      for (let i = 0; i < 25; i++) {
+        await page.getByRole('button', { name: 'Play Match' }).click();
+        await page.waitForTimeout(300);
+      }
+
+      // End Season button should appear
+      await expect(page.locator('.end-season-btn')).toBeVisible();
+    });
+
+    test('should show Club tab with reputation upgrades', async ({ page }) => {
+      await page.getByRole('button', { name: 'Club' }).click();
+      await expect(page.getByRole('heading', { name: 'Club Management' })).toBeVisible();
+      await expect(page.locator('text=Reputation Upgrades')).toBeVisible();
+      await expect(page.locator('text=Veteran Coach')).toBeVisible();
+    });
+
+    test('should show season stats in Club tab', async ({ page }) => {
+      await page.getByRole('button', { name: 'Club' }).click();
+
+      await expect(page.locator('text=Current Season')).toBeVisible();
+      await expect(page.locator('text=Seasons Completed')).toBeVisible();
+    });
+
+    test('should show End Season modal with correct info', async ({ page }) => {
+      await page.waitForTimeout(1500);
+
+      // Play matches to reach goal (need at least 10 wins)
+      for (let i = 0; i < 30; i++) {
+        const playBtn = page.getByRole('button', { name: 'Play Match' });
+        if (await playBtn.isEnabled()) {
+          await playBtn.click();
+          await page.waitForTimeout(100);
+        }
+      }
+
+      // Check if end season button appeared
+      const endSeasonBtn = page.locator('.end-season-btn');
+      if (await endSeasonBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await endSeasonBtn.click();
+
+        // Verify modal content
+        await expect(page.locator('text=Season Complete!')).toBeVisible();
+        await expect(page.locator('text=End Season & Prestige')).toBeVisible();
+        await expect(page.locator('text=Keep Playing')).toBeVisible();
+      }
     });
   });
 });

@@ -200,3 +200,83 @@ Located bottom-right when `dev.enabled = true`:
 - **Task agents för utforskning**: De har egen context, belastar inte huvudkonversationen
 - **Korta svar**: Be om koncisa svar om du inte behöver detaljer
 - **Undvik omläsning**: Läs inte samma fil flera gånger i rad
+
+## Custom Commands
+
+### `/playtest` - Speltesta med Playwright
+
+Kör ett automatiskt speltest som verifierar alla grundläggande mekaniker:
+
+```
+Användning: "kör /playtest" eller "speltesta spelet"
+```
+
+**Vad testas:**
+1. Club creation
+2. Training (passiv + klick)
+3. Match unlock & play
+4. Upgrades köp
+5. Morale boost
+6. Season progress
+7. Achievements
+
+**Implementation:**
+Använd Playwright `browser_run_code` med följande script:
+
+```javascript
+async (page) => {
+  const results = { clubCreation: false, training: false, matchPlay: false,
+                    upgrades: false, morale: false, seasonProgress: false, errors: [] };
+  try {
+    // 1. Reset om spel finns, annars skapa klubb
+    const resetBtn = page.getByRole('button', { name: 'Reset' });
+    if (await resetBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await resetBtn.click();
+      await page.locator('text=OK').click().catch(() => {});
+    }
+
+    // 2. Skapa klubb
+    await page.getByRole('textbox', { name: 'Club Name' }).fill('Playtest FC');
+    await page.getByRole('button', { name: 'Found Club' }).click();
+    await page.waitForTimeout(500);
+    results.clubCreation = true;
+
+    // 3. Sätt 100x speed
+    await page.getByRole('button', { name: '100x' }).click();
+    await page.waitForTimeout(2000);
+    results.training = true;
+
+    // 4. Spela matcher
+    for (let i = 0; i < 15; i++) {
+      const playBtn = page.getByRole('button', { name: 'Play Match' });
+      if (await playBtn.isEnabled()) {
+        await playBtn.click();
+        await page.waitForTimeout(400);
+        results.matchPlay = true;
+      }
+    }
+
+    // 5. Köp upgrade
+    await page.getByRole('button', { name: 'Upgrades' }).click();
+    await page.getByRole('button', { name: /Training Rink/ }).click();
+    results.upgrades = true;
+
+    // 6. Boost morale
+    await page.getByRole('button', { name: 'Dashboard' }).click();
+    const moraleBtn = page.getByRole('button', { name: /Boost Morale/ });
+    if (await moraleBtn.isEnabled()) { await moraleBtn.click(); results.morale = true; }
+
+    // 7. Kolla progress
+    const seasonText = await page.locator('.season-progress-text').textContent();
+    results.seasonProgress = seasonText?.includes('/10') || false;
+
+  } catch (e) { results.errors.push(e.message); }
+  return results;
+}
+```
+
+**Manuell speltest:** Öppna http://localhost:5173 med Playwright och interagera stegvis:
+1. `browser_navigate` till localhost:5173
+2. `browser_snapshot` för att se state
+3. `browser_click` för att klicka element
+4. `browser_run_code` för komplexa sekvenser

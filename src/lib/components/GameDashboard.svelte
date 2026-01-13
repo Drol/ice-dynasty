@@ -1,18 +1,19 @@
 <script lang="ts">
-  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, conditioningRate, cascadeRates, currentTactic as currentTacticStore } from '$lib/stores/game-state';
+  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus } from '$lib/stores/game-state';
   import { formatNumber, formatDuration, formatMoney } from '$lib/utils/format';
-  import { calculateUpgradeCost, getMatchCooldown, calculateMoraleCost, TACTIC_MODIFIERS, getTrainingForCostType, canAffordUpgrade } from '$lib/game/formulas';
+  import { calculateUpgradeCost, getMatchCooldown, calculateMoraleCost, TACTIC_MODIFIERS, canAffordUpgrade } from '$lib/game/formulas';
   import type { MatchTactic } from '$lib/game/types';
   import type { MatchResult, Achievement, Challenge } from '$lib/game/types';
   import DevTools from './DevTools.svelte';
 
   // Tab navigation
-  type TabId = 'dashboard' | 'upgrades' | 'achievements' | 'challenges';
+  type TabId = 'dashboard' | 'upgrades' | 'club' | 'achievements' | 'challenges';
   let activeTab = $state<TabId>('dashboard');
 
   const tabs: { id: TabId; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z' },
     { id: 'upgrades', label: 'Upgrades', icon: 'M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2z' },
+    { id: 'club', label: 'Club', icon: 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z' },
     { id: 'achievements', label: 'Achievements', icon: 'M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2z' },
     { id: 'challenges', label: 'Challenges', icon: 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z' },
   ];
@@ -26,15 +27,32 @@
   const matchUnlocked = $derived($matchesUnlocked);
   const moraleMult = $derived($moraleMultiplier);
   const currentWinChance = $derived($winChance);
-
-  // Training types
-  const condRate = $derived($conditioningRate);
-  const cascade = $derived($cascadeRates);
   const tactic = $derived($currentTacticStore);
+  const incomeRate = $derived($passiveIncomeRate);
 
-  // Calculate rates for each training type display
-  const skatingRate = $derived(game.training.conditioning * cascade.conditioningToSkating);
-  const shootingRate = $derived(game.training.skating * cascade.skatingToShooting);
+  // Season data
+  const season = $derived($currentSeason);
+  const seasonDone = $derived($seasonCompleted);
+  const progress = $derived($seasonProgress);
+  const repGain = $derived($potentialReputationGain);
+  const reputation = $derived($currentReputation);
+  const repUpgrades = $derived($reputationUpgradesWithStatus);
+
+  // End Season modal state
+  let showEndSeasonModal = $state(false);
+  let lastSeasonReward = $state(0);
+
+  function handleEndSeason() {
+    const reward = gameState.endSeason();
+    if (reward > 0) {
+      lastSeasonReward = reward;
+      showEndSeasonModal = false;
+    }
+  }
+
+  function handleBuyRepUpgrade(upgradeId: string) {
+    gameState.buyReputationUpgrade(upgradeId);
+  }
 
   // Tactic info for display
   const tacticInfo = $derived({
@@ -209,16 +227,6 @@
   const canAffordMorale = $derived(game.resources.money >= moraleCost);
   const moraleMaxed = $derived(game.morale.level >= game.morale.maxLevel);
   const moraleProgress = $derived((game.morale.level / game.morale.maxLevel) * 100);
-
-  // Helper to get short name for training type
-  function getCostTypeLabel(costType: string | undefined): string {
-    switch (costType) {
-      case 'conditioning': return 'cond';
-      case 'skating': return 'skt';
-      case 'shooting': return 'shot';
-      default: return 'cond';
-    }
-  }
 </script>
 
 <div class="dashboard" class:celebrating={showGoalCelebration}>
@@ -262,13 +270,27 @@
       </div>
 
       <div class="header-scoreboard">
+        <div class="season-info">
+          <span class="season-label">Season {season.number}</span>
+          <div class="season-progress">
+            <div class="season-progress-bar">
+              <div class="season-progress-fill" style="width: {progress.percentage}%"></div>
+            </div>
+            <span class="season-progress-text">{progress.wins}/{progress.goal} wins</span>
+          </div>
+          {#if seasonDone}
+            <button class="end-season-btn" onclick={() => showEndSeasonModal = true}>
+              End Season (+{repGain} Rep)
+            </button>
+          {/if}
+        </div>
         <div class="record">
           <span class="record-label">Record</span>
           <span class="record-value">{game.stats.matchesWon}W - {game.stats.matchesPlayed - game.stats.matchesWon}L</span>
         </div>
-        <div class="time-played">
-          <span class="time-label">Time</span>
-          <span class="time-value">{formatDuration(game.stats.timePlayed)}</span>
+        <div class="reputation-display">
+          <span class="rep-label">Reputation</span>
+          <span class="rep-value">{formatNumber(reputation)}</span>
         </div>
       </div>
     </div>
@@ -296,7 +318,12 @@
         <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
           <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
         </svg>
-        <span class="header-resource-value">{formatMoney(game.resources.money)}</span>
+        <div class="header-resource-content">
+          <span class="header-resource-value">{formatMoney(game.resources.money)}</span>
+          {#if incomeRate > 0}
+            <span class="header-resource-rate">+{formatMoney(incomeRate)}/s</span>
+          {/if}
+        </div>
       </div>
     </div>
   </header>
@@ -383,57 +410,7 @@
         <section class="panel training-panel">
         <div class="panel-header">
           <h2>Training Rink</h2>
-          <span class="panel-hint">Click the ice to train conditioning!</span>
-        </div>
-
-        <!-- Training Types Display -->
-        <div class="training-types">
-          <div class="training-type conditioning">
-            <div class="training-type-header">
-              <svg viewBox="0 0 24 24" fill="currentColor" class="training-type-icon">
-                <path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/>
-              </svg>
-              <span class="training-type-label">Conditioning</span>
-            </div>
-            <div class="training-type-value">{formatNumber(game.training.conditioning)}</div>
-            <div class="training-type-rate">+{formatNumber(condRate)}/s</div>
-          </div>
-
-          <div class="cascade-arrow">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M16.01 11H4v2h12.01v3L20 12l-3.99-4z"/>
-            </svg>
-            <span class="cascade-rate">{(cascade.conditioningToSkating * 100).toFixed(0)}%</span>
-          </div>
-
-          <div class="training-type skating">
-            <div class="training-type-header">
-              <svg viewBox="0 0 24 24" fill="currentColor" class="training-type-icon">
-                <path d="M12 2L8 6H4v4l-2 2 2 2v4h4l4 4 4-4h4v-4l2-2-2-2V6h-4l-4-4z"/>
-              </svg>
-              <span class="training-type-label">Skating</span>
-            </div>
-            <div class="training-type-value">{formatNumber(game.training.skating)}</div>
-            <div class="training-type-rate">+{formatNumber(skatingRate)}/s</div>
-          </div>
-
-          <div class="cascade-arrow">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M16.01 11H4v2h12.01v3L20 12l-3.99-4z"/>
-            </svg>
-            <span class="cascade-rate">{(cascade.skatingToShooting * 100).toFixed(0)}%</span>
-          </div>
-
-          <div class="training-type shooting">
-            <div class="training-type-header">
-              <svg viewBox="0 0 24 24" fill="currentColor" class="training-type-icon">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h3V8h4v3h3l-5 5-5-5z"/>
-              </svg>
-              <span class="training-type-label">Shooting</span>
-            </div>
-            <div class="training-type-value">{formatNumber(game.training.shooting)}</div>
-            <div class="training-type-rate">+{formatNumber(shootingRate)}/s</div>
-          </div>
+          <span class="panel-hint">Click the ice to train!</span>
         </div>
 
         <button class="rink-button" onclick={handleTrainClick}>
@@ -631,12 +608,12 @@
                 </div>
               </div>
 
-              <div class="upgrade-cost" class:skating-cost={upgrade.costType === 'skating'} class:shooting-cost={upgrade.costType === 'shooting'}>
+              <div class="upgrade-cost">
                 {#if maxed}
                   <span class="maxed-label">MAX</span>
                 {:else}
                   <span class="cost-value">{formatNumber(cost)}</span>
-                  <span class="cost-unit">{getCostTypeLabel(upgrade.costType)}</span>
+                  <span class="cost-unit">min</span>
                 {/if}
               </div>
             </button>
@@ -950,7 +927,119 @@
         {/if}
       </section>
     {/if}
+
+    <!-- Club Tab -->
+    {#if activeTab === 'club'}
+      <section class="tab-content club-content">
+        <h2 class="section-title">Club Management</h2>
+
+        <!-- Season Stats Summary -->
+        <div class="club-stats-panel">
+          <div class="club-stat">
+            <span class="club-stat-label">Current Season</span>
+            <span class="club-stat-value">{season.number}</span>
+          </div>
+          <div class="club-stat">
+            <span class="club-stat-label">Seasons Completed</span>
+            <span class="club-stat-value">{game.stats.totalSeasons}</span>
+          </div>
+          <div class="club-stat">
+            <span class="club-stat-label">Fastest Season</span>
+            <span class="club-stat-value">
+              {game.stats.fastestSeason < Infinity ? formatDuration(game.stats.fastestSeason) : '-'}
+            </span>
+          </div>
+          <div class="club-stat highlight">
+            <span class="club-stat-label">Reputation</span>
+            <span class="club-stat-value">{formatNumber(reputation)}</span>
+          </div>
+        </div>
+
+        <!-- Reputation Upgrades -->
+        <div class="rep-upgrades-section">
+          <h3 class="section-subtitle">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+            </svg>
+            Reputation Upgrades
+          </h3>
+          <p class="section-hint">Permanent bonuses that persist between seasons</p>
+
+          <div class="rep-upgrades-grid">
+            {#each repUpgrades as upgrade}
+              <div class="rep-upgrade-card" class:purchased={upgrade.purchased} class:can-afford={upgrade.canAfford && !upgrade.purchased}>
+                <div class="rep-upgrade-header">
+                  <span class="rep-upgrade-name">{upgrade.name}</span>
+                  <span class="rep-upgrade-cost" class:affordable={upgrade.canAfford}>
+                    {upgrade.purchased ? '✓ Owned' : `${upgrade.cost} Rep`}
+                  </span>
+                </div>
+                <p class="rep-upgrade-desc">{upgrade.description}</p>
+                {#if !upgrade.purchased}
+                  <button
+                    class="rep-upgrade-btn"
+                    disabled={!upgrade.canAfford}
+                    onclick={() => handleBuyRepUpgrade(upgrade.id)}
+                  >
+                    {upgrade.canAfford ? 'Purchase' : 'Not enough Rep'}
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      </section>
+    {/if}
   </main>
+
+  <!-- End Season Modal -->
+  {#if showEndSeasonModal}
+    <div class="modal-overlay" onclick={() => showEndSeasonModal = false}>
+      <div class="modal-content end-season-modal" onclick={(e) => e.stopPropagation()}>
+        <h2 class="modal-title">Season Complete!</h2>
+        <p class="modal-subtitle">Congratulations on completing Season {season.number}!</p>
+
+        <div class="season-summary">
+          <div class="summary-stat">
+            <span class="summary-label">Wins</span>
+            <span class="summary-value">{season.wins}</span>
+          </div>
+          <div class="summary-stat">
+            <span class="summary-label">Losses</span>
+            <span class="summary-value">{season.losses}</span>
+          </div>
+          <div class="summary-stat">
+            <span class="summary-label">Fans</span>
+            <span class="summary-value">{formatNumber(game.resources.fans)}</span>
+          </div>
+          <div class="summary-stat highlight">
+            <span class="summary-label">Reputation Earned</span>
+            <span class="summary-value">+{repGain}</span>
+          </div>
+        </div>
+
+        <div class="modal-warning">
+          <p>Starting a new season will reset:</p>
+          <ul>
+            <li>Training minutes</li>
+            <li>Fans and money</li>
+            <li>Season upgrades</li>
+            <li>Team morale</li>
+          </ul>
+          <p class="modal-keep">You will keep: Reputation, Reputation upgrades, Stats</p>
+        </div>
+
+        <div class="modal-actions">
+          <button class="modal-btn cancel" onclick={() => showEndSeasonModal = false}>
+            Keep Playing
+          </button>
+          <button class="modal-btn confirm" onclick={handleEndSeason}>
+            End Season & Prestige
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <DevTools />
 </div>
@@ -3115,6 +3204,439 @@
     .start-btn,
     .abandon-btn {
       width: 100%;
+    }
+  }
+
+  /* Season Info in Header */
+  .season-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 140px;
+  }
+
+  .season-label {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    color: var(--score-gold);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .season-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .season-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--arena-dark);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .season-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--ice-blue) 0%, var(--score-gold) 100%);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .season-progress-text {
+    font-family: var(--font-score);
+    font-size: 0.75rem;
+    color: var(--ice-pale);
+    white-space: nowrap;
+  }
+
+  .end-season-btn {
+    margin-top: 4px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, var(--score-gold) 0%, #d97706 100%);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--arena-dark);
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .end-season-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 10px rgba(251, 191, 36, 0.3); }
+    50% { box-shadow: 0 0 20px rgba(251, 191, 36, 0.6); }
+  }
+
+  .reputation-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 var(--space-md);
+    border-left: 1px solid var(--arena-surface);
+  }
+
+  .rep-label {
+    font-size: 0.7rem;
+    color: var(--ice-pale);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .rep-value {
+    font-family: var(--font-score);
+    font-size: 1.2rem;
+    color: var(--score-gold);
+    font-weight: bold;
+  }
+
+  /* End Season Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: var(--space-md);
+  }
+
+  .modal-content {
+    background: var(--arena-dark);
+    border: 2px solid var(--score-gold);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl);
+    max-width: 480px;
+    width: 100%;
+    box-shadow: 0 0 60px rgba(251, 191, 36, 0.3);
+  }
+
+  .modal-title {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    color: var(--score-gold);
+    text-align: center;
+    margin-bottom: var(--space-xs);
+  }
+
+  .modal-subtitle {
+    font-size: 0.9rem;
+    color: var(--ice-pale);
+    text-align: center;
+    margin-bottom: var(--space-lg);
+  }
+
+  .season-summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+  }
+
+  .summary-stat {
+    background: var(--arena-surface);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    text-align: center;
+  }
+
+  .summary-stat.highlight {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+    border: 1px solid var(--score-gold);
+  }
+
+  .summary-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--ice-pale);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+
+  .summary-value {
+    font-family: var(--font-score);
+    font-size: 1.5rem;
+    color: var(--ice-white);
+    font-weight: bold;
+  }
+
+  .summary-stat.highlight .summary-value {
+    color: var(--score-gold);
+  }
+
+  .modal-warning {
+    background: rgba(230, 57, 70, 0.1);
+    border: 1px solid var(--score-red);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-lg);
+    font-size: 0.85rem;
+    color: var(--ice-pale);
+  }
+
+  .modal-warning p {
+    margin-bottom: var(--space-sm);
+  }
+
+  .modal-warning ul {
+    margin: 0;
+    padding-left: var(--space-lg);
+    margin-bottom: var(--space-sm);
+  }
+
+  .modal-warning li {
+    color: var(--score-red);
+  }
+
+  .modal-keep {
+    color: var(--score-green);
+    font-weight: bold;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: var(--space-md);
+  }
+
+  .modal-btn {
+    flex: 1;
+    padding: var(--space-md) var(--space-lg);
+    border: none;
+    border-radius: var(--radius-md);
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .modal-btn.cancel {
+    background: var(--arena-surface);
+    color: var(--ice-pale);
+    border: 1px solid var(--arena-elevated);
+  }
+
+  .modal-btn.cancel:hover {
+    background: var(--arena-elevated);
+  }
+
+  .modal-btn.confirm {
+    background: linear-gradient(135deg, var(--score-gold) 0%, #d97706 100%);
+    color: var(--arena-dark);
+  }
+
+  .modal-btn.confirm:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+  }
+
+  /* Club Tab */
+  .club-content {
+    padding: var(--space-lg);
+  }
+
+  .club-stats-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+  }
+
+  .club-stat {
+    background: var(--arena-surface);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    text-align: center;
+    border: 1px solid var(--arena-elevated);
+  }
+
+  .club-stat.highlight {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+    border-color: var(--score-gold);
+  }
+
+  .club-stat-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--ice-pale);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+
+  .club-stat-value {
+    font-family: var(--font-score);
+    font-size: 1.3rem;
+    color: var(--ice-white);
+    font-weight: bold;
+  }
+
+  .club-stat.highlight .club-stat-value {
+    color: var(--score-gold);
+  }
+
+  .rep-upgrades-section {
+    background: var(--arena-surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+  }
+
+  .section-subtitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    color: var(--score-gold);
+    margin-bottom: var(--space-xs);
+  }
+
+  .section-subtitle svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .section-hint {
+    font-size: 0.8rem;
+    color: var(--ice-pale);
+    margin-bottom: var(--space-lg);
+  }
+
+  .rep-upgrades-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-md);
+  }
+
+  .rep-upgrade-card {
+    background: var(--arena-dark);
+    border: 2px solid var(--arena-elevated);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    transition: all 0.2s ease;
+  }
+
+  .rep-upgrade-card.can-afford {
+    border-color: var(--score-gold);
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.2);
+  }
+
+  .rep-upgrade-card.purchased {
+    border-color: var(--score-green);
+    opacity: 0.8;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, transparent 100%);
+  }
+
+  .rep-upgrade-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-xs);
+  }
+
+  .rep-upgrade-name {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    color: var(--ice-white);
+    letter-spacing: 0.03em;
+  }
+
+  .rep-upgrade-cost {
+    font-family: var(--font-score);
+    font-size: 0.85rem;
+    color: var(--ice-pale);
+    padding: 2px 8px;
+    background: var(--arena-surface);
+    border-radius: var(--radius-sm);
+  }
+
+  .rep-upgrade-cost.affordable {
+    color: var(--score-gold);
+    background: rgba(251, 191, 36, 0.15);
+  }
+
+  .rep-upgrade-card.purchased .rep-upgrade-cost {
+    color: var(--score-green);
+    background: rgba(34, 197, 94, 0.15);
+  }
+
+  .rep-upgrade-desc {
+    font-size: 0.8rem;
+    color: var(--ice-pale);
+    margin-bottom: var(--space-sm);
+  }
+
+  .rep-upgrade-btn {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    background: linear-gradient(135deg, var(--score-gold) 0%, #d97706 100%);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--arena-dark);
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .rep-upgrade-btn:disabled {
+    background: var(--arena-elevated);
+    color: var(--ice-pale);
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .rep-upgrade-btn:not(:disabled):hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.4);
+  }
+
+  @media (max-width: 768px) {
+    .season-info {
+      min-width: 100%;
+    }
+
+    .header-scoreboard {
+      flex-wrap: wrap;
+    }
+
+    .reputation-display {
+      border-left: none;
+      border-top: 1px solid var(--arena-surface);
+      padding-top: var(--space-sm);
+    }
+
+    .modal-content {
+      padding: var(--space-lg);
+    }
+
+    .modal-title {
+      font-size: 1.5rem;
+    }
+
+    .modal-actions {
+      flex-direction: column;
+    }
+
+    .rep-upgrades-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>
