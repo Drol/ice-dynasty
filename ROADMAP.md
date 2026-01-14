@@ -187,3 +187,20 @@ Alla achievements har dolda krav. Svåra/meningsfulla ger permanenta bonusar.
   - Bonus achievements: Synliga från start med namn + reward-typ, krav dolda ("???")
   - Cosmetic achievements: Helt dolda tills unlock (överraskning)
 - **Era 2+ tabs:** Players, League, Academy, etc. läggs till när de låses upp
+
+### 2026-01-14 - UX Förbättringar
+- **Auto-match upgrade:** "Improved Jockstraps" - automatisk matchspelning (120s → 30s interval)
+- **Challenge banner redesign:** Tröja med lagfärger, bättre kontrast, abandon-knapp
+- **Header komprimering:** Resurser inline i header
+- **Modal-komponent:** Återanvändbar för bekräftelser (reset, abandon challenge, etc.)
+- **Challenge nivåsystem:** AD-inspirerat med 5 nivåer per challenge, stackande rewards
+
+### 2026-01-14 - Dashboard Redesign: Unified Rink
+- **Unified Rink:** Training och match i samma vy - större, mer dynamisk
+- **NES 8-bit stil:** Animerade pixel-spelare, målvakter, domare och puck
+  - Hemmalag: Spelarens valda färger
+  - Bortalag: Slumpmässiga färger per match
+  - Domare: Klassisk svart/vit-randig
+- **4 Action buttons:** Training + 3 match tactics (Offensive/Balanced/Defensive)
+- **Borttaget:** Separat "Play Match" knapp - taktik-val startar direkt matchen
+- **Match animation:** 2.5s animation innan resultat visas

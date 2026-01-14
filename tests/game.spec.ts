@@ -90,30 +90,40 @@ test.describe('Ice Dynasty Game', () => {
       await page.getByRole('button', { name: '1000x' }).click();
     });
 
-    test('should have Play Match locked initially', async ({ page }) => {
-      await expect(page.getByRole('button', { name: /Locked/i })).toBeVisible();
+    test('should have matches locked initially', async ({ page }) => {
+      // Matches are locked initially - show locked info message
+      await expect(page.locator('.match-locked-info')).toBeVisible();
+      await expect(page.locator('text=/unlock matches/i')).toBeVisible();
     });
 
-    test('should unlock Play Match after 3000 training', async ({ page }) => {
+    test('should unlock matches after 3000 training', async ({ page }) => {
       // Wait for 3000+ training at 1000x speed (1/s * 1000 = 1000/s, need 3+ seconds)
       await page.waitForTimeout(4000);
 
-      // Match is unlocked and we have enough training to afford it
-      await expect(page.getByRole('button', { name: 'Play Match' })).toBeEnabled();
+      // Match buttons should now be visible and enabled
+      await expect(page.getByRole('button', { name: /Balanced/i })).toBeEnabled();
     });
 
     test('should play a match and show result', async ({ page }) => {
       // Wait for 3000+ training at 1000x speed
       await page.waitForTimeout(4000);
-      await page.getByRole('button', { name: 'Play Match' }).click();
 
-      // Should show Victory or Defeat
-      await expect(page.locator('text=/Victory|Defeat/')).toBeVisible();
+      // Click Balanced tactic button to start match
+      await page.getByRole('button', { name: /Balanced/i }).click();
+
+      // Wait for match animation (~2.5s) + result display (result shows while in match mode)
+      await page.waitForTimeout(3500);
+
+      // Should show Victory! or Defeat in result label
+      await expect(page.locator('.result-label')).toBeVisible({ timeout: 10000 });
     });
 
     test('should update record after match', async ({ page }) => {
       await page.waitForTimeout(4000);
-      await page.getByRole('button', { name: 'Play Match' }).click();
+      await page.getByRole('button', { name: /Balanced/i }).click();
+
+      // Wait for match to complete
+      await page.waitForTimeout(5000);
 
       // Record should no longer be 0W - 0L
       await expect(page.locator('text=/[1-9]\\d*W|[1-9]\\d*L/')).toBeVisible();
@@ -136,8 +146,8 @@ test.describe('Ice Dynasty Game', () => {
 
     test('should buy upgrade and increase cost', async ({ page }) => {
       // Play a match to get money for upgrades
-      await page.getByRole('button', { name: 'Play Match' }).click();
-      await page.waitForTimeout(500);
+      await page.getByRole('button', { name: /Balanced/i }).click();
+      await page.waitForTimeout(5000); // Wait for match animation + result
 
       await page.getByRole('button', { name: 'Upgrades' }).click();
 
@@ -193,28 +203,31 @@ test.describe('Ice Dynasty Game', () => {
     test('should enable Boost Morale after earning money', async ({ page }) => {
       // Wait for 3000+ training at 1000x (1000/s, need 3s)
       await page.waitForTimeout(4000);
-      await page.getByRole('button', { name: 'Play Match' }).click();
-      await page.waitForTimeout(500);
+      await page.getByRole('button', { name: /Balanced/i }).click();
+      await page.waitForTimeout(5000); // Wait for match
       // Wait for more training for second match
       await page.waitForTimeout(4000);
-      await page.getByRole('button', { name: 'Play Match' }).click();
+      await page.getByRole('button', { name: /Balanced/i }).click();
+      await page.waitForTimeout(5000); // Wait for match
 
       // Should have enough money now
       await expect(page.getByRole('button', { name: /Boost Morale/i })).toBeEnabled();
     });
 
     test('should increase morale level when boosted', async ({ page }) => {
-      // Wait for enough training for 3 matches (9000+ training at 1000/s = 9s)
-      await page.waitForTimeout(10000);
+      test.setTimeout(60000); // Increase timeout for this test
 
-      // Play matches to get money (wait between for more training)
-      for (let i = 0; i < 3; i++) {
-        const playBtn = page.getByRole('button', { name: 'Play Match' });
+      // Wait for enough training for matches
+      await page.waitForTimeout(8000);
+
+      // Play a couple matches to get money
+      for (let i = 0; i < 2; i++) {
+        const playBtn = page.getByRole('button', { name: /Balanced/i });
         if (await playBtn.isEnabled()) {
           await playBtn.click();
-          await page.waitForTimeout(400);
+          await page.waitForTimeout(5500); // Wait for match animation + result
         }
-        if (i < 2) await page.waitForTimeout(4000); // Wait for more training
+        await page.waitForTimeout(4000); // Wait for more training
       }
 
       await page.getByRole('button', { name: /Boost Morale/i }).click();
@@ -288,17 +301,19 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should unlock First Blood on first win', async ({ page }) => {
-      // Wait for 9000+ training at 1000x (1000/s = 9s)
-      await page.waitForTimeout(10000);
+      test.setTimeout(60000); // Increase timeout for this test
 
-      // Play matches until we win (wait between for more training)
-      for (let i = 0; i < 3; i++) {
-        const playBtn = page.getByRole('button', { name: 'Play Match' });
+      // Wait for training to accumulate
+      await page.waitForTimeout(8000);
+
+      // Play matches until we win
+      for (let i = 0; i < 2; i++) {
+        const playBtn = page.getByRole('button', { name: /Balanced/i });
         if (await playBtn.isEnabled()) {
           await playBtn.click();
-          await page.waitForTimeout(400);
+          await page.waitForTimeout(5500); // Wait for match animation + result
         }
-        if (i < 2) await page.waitForTimeout(4000); // Wait for more training
+        await page.waitForTimeout(4000); // Wait for more training
       }
 
       await page.getByRole('button', { name: /Achievements/i }).click();
@@ -328,8 +343,8 @@ test.describe('Ice Dynasty Game', () => {
       // Wait for 3000+ training at 1000x (1000/s = 3s)
       await page.waitForTimeout(4000);
 
-      await page.getByRole('button', { name: 'Play Match' }).click();
-      await page.waitForTimeout(500);
+      await page.getByRole('button', { name: /Balanced/i }).click();
+      await page.waitForTimeout(5000); // Wait for match animation
 
       // Should see income rate displayed (fans generate money)
       await expect(page.locator('.header-resource.money .header-resource-rate')).toBeVisible();
@@ -340,8 +355,8 @@ test.describe('Ice Dynasty Game', () => {
       await page.waitForTimeout(4000);
 
       // Play a match to get fans
-      await page.getByRole('button', { name: 'Play Match' }).click();
-      await page.waitForTimeout(400);
+      await page.getByRole('button', { name: /Balanced/i }).click();
+      await page.waitForTimeout(5000); // Wait for match animation
 
       // Get initial money
       const getMoneyText = async () => {
@@ -415,8 +430,8 @@ test.describe('Ice Dynasty Game', () => {
       await page.waitForTimeout(4000);
 
       // Play a match
-      await page.getByRole('button', { name: 'Play Match' }).click();
-      await page.waitForTimeout(400);
+      await page.getByRole('button', { name: /Balanced/i }).click();
+      await page.waitForTimeout(5000); // Wait for match animation
 
       // Season progress should have updated (at least 0 or 1 win)
       const progressText = await page.locator('.season-progress-text').textContent();
@@ -431,10 +446,10 @@ test.describe('Ice Dynasty Game', () => {
 
       for (let i = 0; i < 20; i++) {
         await page.waitForTimeout(10000);
-        const playBtn = page.getByRole('button', { name: 'Play Match' });
+        const playBtn = page.getByRole('button', { name: /Balanced/i });
         if (await playBtn.isEnabled()) {
           await playBtn.click();
-          await page.waitForTimeout(200);
+          await page.waitForTimeout(5000); // Wait for match animation
         }
         const endBtn = page.locator('.end-season-btn');
         if (await endBtn.isVisible({ timeout: 100 }).catch(() => false)) {
@@ -465,10 +480,10 @@ test.describe('Ice Dynasty Game', () => {
 
       for (let i = 0; i < 20; i++) {
         await page.waitForTimeout(10000);
-        const playBtn = page.getByRole('button', { name: 'Play Match' });
+        const playBtn = page.getByRole('button', { name: /Balanced/i });
         if (await playBtn.isEnabled()) {
           await playBtn.click();
-          await page.waitForTimeout(200);
+          await page.waitForTimeout(5000); // Wait for match animation
         }
         const endBtn = page.locator('.end-season-btn');
         if (await endBtn.isVisible({ timeout: 100 }).catch(() => false)) {
