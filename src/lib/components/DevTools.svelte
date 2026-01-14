@@ -1,14 +1,16 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/game-state';
+  import Modal from './Modal.svelte';
 
   const game = $derived($gameState);
 
   const speeds = [1, 10, 100, 1000, 10000];
 
+  let showResetModal = $state(false);
+
   function handleReset() {
-    if (confirm('Are you sure you want to reset all progress?')) {
-      gameState.reset();
-    }
+    gameState.reset();
+    showResetModal = false;
   }
 
   function setSpeed(speed: number) {
@@ -40,13 +42,35 @@
       </div>
     </div>
 
-    <button class="reset-btn" onclick={handleReset}>
+    <button class="reset-btn" onclick={() => showResetModal = true}>
       <svg viewBox="0 0 24 24" fill="currentColor">
         <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
       </svg>
       <span>Reset</span>
     </button>
   </div>
+
+  <Modal
+    open={showResetModal}
+    title="Reset Game?"
+    onclose={() => showResetModal = false}
+    onconfirm={handleReset}
+    confirmText="Reset Everything"
+    cancelText="Cancel"
+    confirmDanger={true}
+  >
+    {#snippet children()}
+      <p>This will completely reset all progress:</p>
+      <ul style="margin: 0.5rem 0; padding-left: 1.2rem; color: var(--ice-pale);">
+        <li>Training, fans, and money</li>
+        <li>All upgrades</li>
+        <li>Reputation and rep upgrades</li>
+        <li>Challenge progress</li>
+        <li>Achievements</li>
+      </ul>
+      <p style="color: var(--score-red); font-weight: bold;">This cannot be undone!</p>
+    {/snippet}
+  </Modal>
 {/if}
 
 <style>

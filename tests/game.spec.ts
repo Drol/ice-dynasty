@@ -49,8 +49,8 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should show training minutes in header', async ({ page }) => {
-      // Resources are now shown in header
-      await expect(page.locator('.header-resources')).toBeVisible();
+      // Resources are now shown inline in header
+      await expect(page.locator('.header-resources-inline')).toBeVisible();
       await expect(page.locator('.header-resource.training')).toBeVisible();
     });
 
@@ -260,7 +260,8 @@ test.describe('Ice Dynasty Game', () => {
       await page.waitForTimeout(300);
 
       await expect(page.getByRole('heading', { name: /Active Challenge - Level 1/ })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Abandon' })).toBeVisible();
+      // Abandon button is now in the header challenge bar
+      await expect(page.locator('.challenge-abandon-btn')).toBeVisible();
     });
   });
 
@@ -381,9 +382,11 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should reset game when reset button is clicked', async ({ page }) => {
-      page.on('dialog', dialog => dialog.accept());
-
+      // Click reset button to open modal
       await page.getByRole('button', { name: 'Reset' }).click();
+
+      // Confirm in the modal
+      await page.getByRole('button', { name: 'Reset Everything' }).click();
 
       // Should show club creation form again
       await expect(page.getByRole('textbox', { name: /Club Name/i })).toBeVisible();
@@ -398,13 +401,13 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should show season info in header', async ({ page }) => {
-      await expect(page.locator('text=Season 1')).toBeVisible();
-      await expect(page.locator('.season-progress-text')).toHaveText('0/10 wins');
+      await expect(page.locator('.season-label')).toHaveText('Season 1');
+      await expect(page.locator('.season-progress-text')).toHaveText('0/10');
     });
 
     test('should show reputation display', async ({ page }) => {
-      await expect(page.locator('.rep-label')).toHaveText('Reputation');
-      await expect(page.locator('.rep-value')).toHaveText('0');
+      // Reputation is now shown as "X Rep" format
+      await expect(page.locator('.rep-value')).toHaveText('0 Rep');
     });
 
     test('should track season wins', async ({ page }) => {
@@ -417,7 +420,7 @@ test.describe('Ice Dynasty Game', () => {
 
       // Season progress should have updated (at least 0 or 1 win)
       const progressText = await page.locator('.season-progress-text').textContent();
-      expect(progressText).toMatch(/\d+\/10 wins/);
+      expect(progressText).toMatch(/\d+\/10/);
     });
 
     // Skip: This test requires completing a full 10-win season which takes too long

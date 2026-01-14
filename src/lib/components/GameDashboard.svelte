@@ -5,6 +5,7 @@
   import type { MatchTactic, ChallengeRestriction } from '$lib/game/types';
   import type { MatchResult, Achievement, Challenge } from '$lib/game/types';
   import DevTools from './DevTools.svelte';
+  import Modal from './Modal.svelte';
 
   // Tab navigation
   type TabId = 'dashboard' | 'upgrades' | 'club' | 'achievements' | 'challenges';
@@ -50,12 +51,20 @@
   let showEndSeasonModal = $state(false);
   let lastSeasonReward = $state(0);
 
+  // Abandon Challenge modal state
+  let showAbandonModal = $state(false);
+
   function handleEndSeason() {
     const reward = gameState.endSeason();
     if (reward > 0) {
       lastSeasonReward = reward;
       showEndSeasonModal = false;
     }
+  }
+
+  function handleAbandonChallenge() {
+    gameState.abandonChallenge();
+    showAbandonModal = false;
   }
 
   function handleBuyRepUpgrade(upgradeId: string) {
@@ -196,10 +205,6 @@
     gameState.startChallenge(challengeId);
   }
 
-  function handleAbandonChallenge() {
-    gameState.abandonChallenge();
-  }
-
   function getChallengeProgress(challenge: Challenge): number {
     const goalWins = getChallengeGoalWins(challenge, challenge.attemptingLevel || 1);
     return (challenge.currentWins / goalWins) * 100;
@@ -326,60 +331,60 @@
         </div>
       </div>
 
-      <div class="header-scoreboard">
+      <!-- Resources integrated into header -->
+      <div class="header-resources-inline">
+        <div class="header-resource training">
+          <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+          </svg>
+          <div class="header-resource-content">
+            <span class="header-resource-value">{formatNumber(minutes)}</span>
+            <span class="header-resource-rate">+{formatNumber(rate)}/s</span>
+          </div>
+        </div>
+
+        <div class="header-resource fans">
+          <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+          </svg>
+          <span class="header-resource-value">{formatNumber(game.resources.fans)}</span>
+        </div>
+
+        <div class="header-resource money">
+          <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
+          </svg>
+          <div class="header-resource-content">
+            <span class="header-resource-value">{formatMoney(game.resources.money)}</span>
+            {#if incomeRate > 0}
+              <span class="header-resource-rate">+{formatMoney(incomeRate)}/s</span>
+            {/if}
+          </div>
+        </div>
+
+        <div class="header-divider"></div>
+
         <div class="season-info">
           <span class="season-label">Season {season.number}</span>
           <div class="season-progress">
             <div class="season-progress-bar">
               <div class="season-progress-fill" style="width: {progress.percentage}%"></div>
             </div>
-            <span class="season-progress-text">{progress.wins}/{progress.goal} wins</span>
+            <span class="season-progress-text">{progress.wins}/{progress.goal}</span>
           </div>
           {#if seasonDone}
             <button class="end-season-btn" onclick={() => showEndSeasonModal = true}>
-              End Season (+{repGain} Rep)
+              End Season (+{repGain})
             </button>
           {/if}
         </div>
+
         <div class="record">
-          <span class="record-label">Record</span>
-          <span class="record-value">{game.stats.matchesWon}W - {game.stats.matchesPlayed - game.stats.matchesWon}L</span>
+          <span class="record-value">{game.stats.matchesWon}W-{game.stats.matchesPlayed - game.stats.matchesWon}L</span>
         </div>
+
         <div class="reputation-display">
-          <span class="rep-label">Reputation</span>
-          <span class="rep-value">{formatNumber(reputation)}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Resource Bar (always visible in header) -->
-    <div class="header-resources">
-      <div class="header-resource training">
-        <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
-        </svg>
-        <div class="header-resource-content">
-          <span class="header-resource-value">{formatNumber(minutes)}</span>
-          <span class="header-resource-rate">+{formatNumber(rate)}/s</span>
-        </div>
-      </div>
-
-      <div class="header-resource fans">
-        <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-        </svg>
-        <span class="header-resource-value">{formatNumber(game.resources.fans)}</span>
-      </div>
-
-      <div class="header-resource money">
-        <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
-        </svg>
-        <div class="header-resource-content">
-          <span class="header-resource-value">{formatMoney(game.resources.money)}</span>
-          {#if incomeRate > 0}
-            <span class="header-resource-rate">+{formatMoney(incomeRate)}/s</span>
-          {/if}
+          <span class="rep-value">{formatNumber(reputation)} Rep</span>
         </div>
       </div>
     </div>
@@ -388,13 +393,22 @@
     {#if currentChallenge}
       <div class="header-challenge-bar">
         <div class="challenge-indicator">
-          <svg class="challenge-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+          <!-- Jersey icon with team colors -->
+          <svg class="challenge-jersey" viewBox="0 0 24 24">
+            <path class="jersey-body" d="M6 4L4 6v14h16V6l-2-2h-3v2a3 3 0 01-6 0V4H6z" fill="var(--primary, #3b82f6)"/>
+            <path class="jersey-collar" d="M9 4v2a3 3 0 006 0V4" fill="none" stroke="var(--secondary, #fbbf24)" stroke-width="1.5"/>
+            <path class="jersey-sleeves" d="M4 6L2 8v4l2-1V6zM20 6l2 2v4l-2-1V6z" fill="var(--secondary, #fbbf24)"/>
           </svg>
           <span class="challenge-name">{currentChallenge.name} L{currentChallenge.attemptingLevel}</span>
           <span class="challenge-restriction">{getShortRestrictionText(getChallengeRestriction(currentChallenge, currentChallenge.attemptingLevel))}</span>
           <span class="challenge-wins">{currentChallenge.currentWins}/{getChallengeGoalWins(currentChallenge, currentChallenge.attemptingLevel)} wins</span>
         </div>
+        <button class="challenge-abandon-btn" onclick={() => showAbandonModal = true}>
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+          Abandon
+        </button>
       </div>
     {/if}
 
@@ -1080,6 +1094,22 @@
     </div>
   {/if}
 
+  <!-- Abandon Challenge Modal -->
+  <Modal
+    open={showAbandonModal}
+    title="Abandon Challenge?"
+    onclose={() => showAbandonModal = false}
+    onconfirm={handleAbandonChallenge}
+    confirmText="Abandon"
+    cancelText="Keep Going"
+    confirmDanger={true}
+  >
+    {#snippet children()}
+      <p>Are you sure you want to abandon <strong>{currentChallenge?.name}</strong>?</p>
+      <p style="margin-top: 0.5rem; color: var(--score-red);">Your progress ({currentChallenge?.currentWins} wins) will be lost.</p>
+    {/snippet}
+  </Modal>
+
   <DevTools />
 </div>
 
@@ -1256,57 +1286,27 @@
     opacity: 0.7;
   }
 
-  .header-scoreboard {
+  /* Header Resources Inline */
+  .header-resources-inline {
     display: flex;
-    gap: var(--space-xl);
-  }
-
-  .record,
-  .time-played {
-    text-align: center;
-  }
-
-  .record-label,
-  .time-label {
-    display: block;
-    font-size: 0.65rem;
-    color: var(--ice-blue);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 2px;
-  }
-
-  .record-value,
-  .time-value {
-    font-family: var(--font-score);
-    font-size: 0.95rem;
-    color: var(--ice-white);
-    letter-spacing: 0.05em;
-  }
-
-  /* Header Resources Bar */
-  .header-resources {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-xl);
-    padding: var(--space-sm) var(--space-lg);
-    background: var(--arena-surface);
-    border-bottom: 1px solid var(--arena-elevated);
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
   }
 
   .header-resource {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-xs) var(--space-md);
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
     background: var(--arena-dark);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     border: 1px solid var(--arena-elevated);
   }
 
   .header-resource-icon {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     fill: var(--ice-blue);
   }
 
@@ -1326,19 +1326,104 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    line-height: 1.1;
   }
 
   .header-resource-value {
     font-family: var(--font-score);
-    font-size: 1rem;
+    font-size: 0.9rem;
     color: var(--ice-white);
     letter-spacing: 0.05em;
   }
 
   .header-resource-rate {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     color: var(--ice-pale);
     opacity: 0.8;
+  }
+
+  .header-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--arena-elevated);
+    margin: 0 var(--space-xs);
+  }
+
+  .season-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .season-label {
+    font-family: var(--font-score);
+    font-size: 0.75rem;
+    color: var(--ice-blue);
+    text-transform: uppercase;
+  }
+
+  .season-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .season-progress-bar {
+    width: 60px;
+    height: 6px;
+    background: var(--arena-dark);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .season-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--ice-blue), var(--score-gold));
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .season-progress-text {
+    font-family: var(--font-score);
+    font-size: 0.7rem;
+    color: var(--ice-pale);
+  }
+
+  .end-season-btn {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--score-gold);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--arena-deep);
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    animation: pulse-gold 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-gold {
+    0%, 100% { box-shadow: 0 0 5px var(--score-gold); }
+    50% { box-shadow: 0 0 15px var(--score-gold); }
+  }
+
+  .record {
+    font-family: var(--font-score);
+    font-size: 0.8rem;
+    color: var(--ice-pale);
+  }
+
+  .record-value {
+    color: var(--ice-white);
+  }
+
+  .reputation-display {
+    font-family: var(--font-score);
+    font-size: 0.8rem;
+  }
+
+  .rep-value {
+    color: var(--score-gold);
   }
 
   /* Tab Navigation */
@@ -1428,9 +1513,13 @@
 
   /* Active Challenge Bar in Header */
   .header-challenge-bar {
-    background: linear-gradient(90deg, var(--score-red) 0%, rgba(220, 38, 38, 0.6) 100%);
-    padding: var(--space-xs) var(--space-md);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(90deg, var(--arena-deep) 0%, var(--arena-dark) 100%);
+    padding: var(--space-sm) var(--space-md);
+    border-top: 2px solid var(--score-gold);
+    border-bottom: 1px solid var(--arena-elevated);
   }
 
   .challenge-indicator {
@@ -1441,31 +1530,70 @@
     font-family: var(--font-score);
     font-size: 0.8rem;
     color: var(--ice-white);
+    flex: 1;
   }
 
-  .challenge-icon {
-    width: 16px;
-    height: 16px;
-    opacity: 0.9;
+  .challenge-jersey {
+    width: 22px;
+    height: 22px;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+    flex-shrink: 0;
   }
 
   .challenge-name {
     font-weight: bold;
     letter-spacing: 0.05em;
+    color: var(--score-gold);
   }
 
-  .challenge-restriction {
-    opacity: 0.85;
-    padding: 0.15rem 0.5rem;
-    background: rgba(0, 0, 0, 0.2);
+  .challenge-indicator .challenge-restriction,
+  .challenge-indicator .challenge-wins {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 0.5rem;
+    margin: 0;
+    background: var(--arena-surface);
     border-radius: var(--radius-sm);
-  }
-
-  .challenge-wins {
+    color: var(--ice-white);
     font-family: var(--font-score);
-    padding: 0.15rem 0.5rem;
-    background: rgba(255, 255, 255, 0.15);
+    font-size: 0.7rem;
+  }
+
+  .challenge-indicator .challenge-restriction {
+    border: 1px solid var(--score-red);
+  }
+
+  .challenge-indicator .challenge-wins {
+    border: 1px solid var(--ice-blue);
+  }
+
+  .challenge-abandon-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 0.2rem 0.5rem;
+    background: transparent;
+    border: 1px solid var(--score-red);
     border-radius: var(--radius-sm);
+    color: var(--score-red);
+    font-family: var(--font-score);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+  }
+
+  .challenge-abandon-btn:hover {
+    background: var(--score-red);
+    color: white;
+    opacity: 1;
+  }
+
+  .challenge-abandon-btn svg {
+    width: 12px;
+    height: 12px;
   }
 
   /* Auto-Match Bar in Header */
