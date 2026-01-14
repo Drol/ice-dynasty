@@ -1267,3 +1267,27 @@ export const reputationUpgradesWithStatus = derived(gameState, ($state) =>
     canAfford: $state.resources.reputation >= upgrade.cost,
   }))
 );
+
+// ========== UI BADGE COUNTS ==========
+
+/**
+ * Count of affordable upgrades (not maxed)
+ */
+export const affordableUpgradesCount = derived(gameState, ($state) => {
+  return $state.upgrades.filter((u) => {
+    if (u.level >= u.maxLevel) return false;
+    if (!isUpgradeUnlocked(u, $state)) return false;
+    const cost = calculateUpgradeCost(u);
+    return $state.resources.money >= cost;
+  }).length;
+});
+
+/**
+ * Count of affordable reputation upgrades (not purchased)
+ */
+export const affordableRepUpgradesCount = derived(gameState, ($state) => {
+  return $state.reputationUpgrades.filter((u) => {
+    if (u.purchased) return false;
+    return $state.resources.reputation >= u.cost;
+  }).length;
+});

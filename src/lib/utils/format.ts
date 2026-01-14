@@ -21,11 +21,12 @@ const SUFFIXES = [
 
 /**
  * Format a large number with appropriate suffix
+ * Default: no decimals for cleaner UI
  */
 export function formatNumber(
   value: number,
   style: NotationStyle = 'standard',
-  decimals: number = 2
+  decimals: number = 0
 ): string {
   if (!Number.isFinite(value)) return '0';
   if (value < 0) return '-' + formatNumber(-value, style, decimals);
@@ -40,7 +41,7 @@ export function formatNumber(
 
   // Standard notation with suffixes
   if (value < 1000) {
-    return value.toFixed(value % 1 === 0 ? 0 : decimals);
+    return Math.round(value).toString();
   }
 
   const tier = Math.floor(Math.log10(value) / 3);
@@ -50,7 +51,9 @@ export function formatNumber(
   }
 
   const scaled = value / Math.pow(1000, tier);
-  return scaled.toFixed(decimals) + SUFFIXES[tier];
+  // Use 1 decimal for values like 1.5K, but none for 15K
+  const displayDecimals = scaled < 10 ? 1 : 0;
+  return scaled.toFixed(displayDecimals) + SUFFIXES[tier];
 }
 
 function formatScientific(value: number, decimals: number): string {

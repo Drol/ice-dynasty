@@ -376,7 +376,8 @@ test.describe('Ice Dynasty Game', () => {
 
       await page.getByRole('button', { name: '1000x' }).click();
 
-      await expect(page.locator('.header-resource-rate').first()).toHaveText('+1.00K/s');
+      // New format: 1 decimal for values < 10K
+      await expect(page.locator('.header-resource-rate').first()).toHaveText('+1.0K/s');
     });
 
     test('should reset game when reset button is clicked', async ({ page }) => {

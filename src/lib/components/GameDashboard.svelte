@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus, matchCost as matchCostStore, canAffordMatch as canAffordMatchStore } from '$lib/stores/game-state';
+  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus, matchCost as matchCostStore, canAffordMatch as canAffordMatchStore, affordableUpgradesCount, affordableRepUpgradesCount } from '$lib/stores/game-state';
   import { formatNumber, formatDuration, formatMoney } from '$lib/utils/format';
   import { calculateUpgradeCost, calculateMoraleCost, TACTIC_MODIFIERS, canAffordUpgrade, getChallengeGoalWins, getChallengeRestriction, getTotalChallengeReward, getNextLevelReward } from '$lib/game/formulas';
   import type { MatchTactic, ChallengeRestriction } from '$lib/game/types';
@@ -37,6 +37,10 @@
   const repGain = $derived($potentialReputationGain);
   const reputation = $derived($currentReputation);
   const repUpgrades = $derived($reputationUpgradesWithStatus);
+
+  // Badge counts for tabs
+  const upgradesBuyable = $derived($affordableUpgradesCount);
+  const repUpgradesBuyable = $derived($affordableRepUpgradesCount);
 
   // End Season modal state
   let showEndSeasonModal = $state(false);
@@ -223,6 +227,29 @@
     }
   }
 
+  // Short restriction text for header display
+  function getShortRestrictionText(restriction: ChallengeRestriction): string {
+    const { type, value } = restriction;
+    switch (type) {
+      case 'winChanceCap':
+        return `${Math.round((value as number) * 100)}% win cap`;
+      case 'noMoney':
+        return 'No money';
+      case 'trainingDecay':
+        return `${Math.round((value as number) * 100)}% decay`;
+      case 'forcedTactic':
+        return `${value} only`;
+      case 'noUpgrades':
+        return 'No upgrades';
+      case 'timeLimit':
+        return `${Math.round(value as number)}s limit`;
+      case 'highGoal':
+        return `${value} wins`;
+      default:
+        return '';
+    }
+  }
+
   // Generate star display for challenge levels (★★★☆☆)
   function getLevelStars(challenge: Challenge): string {
     const filled = '★'.repeat(challenge.currentLevel);
@@ -352,6 +379,20 @@
         </div>
       </div>
     </div>
+
+    <!-- Active Challenge Indicator -->
+    {#if currentChallenge}
+      <div class="header-challenge-bar">
+        <div class="challenge-indicator">
+          <svg class="challenge-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+          </svg>
+          <span class="challenge-name">{currentChallenge.name} L{currentChallenge.attemptingLevel}</span>
+          <span class="challenge-restriction">{getShortRestrictionText(getChallengeRestriction(currentChallenge, currentChallenge.attemptingLevel))}</span>
+          <span class="challenge-wins">{currentChallenge.currentWins}/{getChallengeGoalWins(currentChallenge, currentChallenge.attemptingLevel)} wins</span>
+        </div>
+      </div>
+    {/if}
   </header>
 
   <!-- Tab Navigation -->
@@ -367,6 +408,12 @@
             <path d={tab.icon} />
           </svg>
           <span class="tab-label">{tab.label}</span>
+          {#if tab.id === 'upgrades' && upgradesBuyable > 0}
+            <span class="tab-badge buyable">{upgradesBuyable}</span>
+          {/if}
+          {#if tab.id === 'club' && repUpgradesBuyable > 0}
+            <span class="tab-badge buyable">{repUpgradesBuyable}</span>
+          {/if}
           {#if tab.id === 'achievements' && unlockedCount > 0}
             <span class="tab-badge">{unlockedCount}</span>
           {/if}
@@ -1348,6 +1395,60 @@
     align-items: center;
     justify-content: center;
     box-shadow: 0 2px 8px rgba(251, 191, 36, 0.4);
+  }
+
+  .tab-badge.buyable {
+    background: var(--arena-green, #22c55e);
+    color: white;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
+    animation: pulse-badge 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-badge {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+
+  /* Active Challenge Bar in Header */
+  .header-challenge-bar {
+    background: linear-gradient(90deg, var(--score-red) 0%, rgba(220, 38, 38, 0.6) 100%);
+    padding: var(--space-xs) var(--space-md);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .challenge-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    font-family: var(--font-score);
+    font-size: 0.8rem;
+    color: var(--ice-white);
+  }
+
+  .challenge-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.9;
+  }
+
+  .challenge-name {
+    font-weight: bold;
+    letter-spacing: 0.05em;
+  }
+
+  .challenge-restriction {
+    opacity: 0.85;
+    padding: 0.15rem 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+  }
+
+  .challenge-wins {
+    font-family: var(--font-score);
+    padding: 0.15rem 0.5rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-sm);
   }
 
   /* Main */
