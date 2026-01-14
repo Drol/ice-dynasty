@@ -225,7 +225,7 @@ export interface Upgrade {
   baseCost: number;
   costMultiplier: number;
   effect: number; // multiplier or flat bonus depending on type
-  type: 'training' | 'fans' | 'money' | 'click' | 'winChance' | 'clickMult' | 'baseMoney' | 'combo' | 'winBonus' | 'trainingMult';
+  type: 'training' | 'fans' | 'money' | 'click' | 'winChance' | 'clickMult' | 'baseMoney' | 'combo' | 'winBonus' | 'trainingMult' | 'autoMatch';
   unlockCondition?: {
     type: 'fans' | 'matchesPlayed' | 'matchesWon' | 'money' | 'trainingMinutes';
     value: number;
@@ -373,6 +373,18 @@ export const INITIAL_UPGRADES: Upgrade[] = [
   },
 
   // ========== LATE GAME ==========
+  {
+    id: 'improved_jockstraps',
+    name: 'Improved Jockstraps',
+    description: 'Auto-plays matches (starts at 2min, -15%/level)',
+    level: 0,
+    maxLevel: 10,
+    baseCost: 15000,
+    costMultiplier: 2.0,
+    effect: 0.15,  // 15% interval reduction per level
+    type: 'autoMatch',
+    unlockCondition: { type: 'matchesPlayed', value: 75 },
+  },
   {
     id: 'community_support',
     name: 'Community Support',

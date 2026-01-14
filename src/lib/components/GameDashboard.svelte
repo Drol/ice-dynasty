@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus, matchCost as matchCostStore, canAffordMatch as canAffordMatchStore, affordableUpgradesCount, affordableRepUpgradesCount } from '$lib/stores/game-state';
+  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus, matchCost as matchCostStore, canAffordMatch as canAffordMatchStore, affordableUpgradesCount, affordableRepUpgradesCount, autoMatchInterval as autoMatchIntervalStore, timeUntilAutoMatch as timeUntilAutoMatchStore } from '$lib/stores/game-state';
   import { formatNumber, formatDuration, formatMoney } from '$lib/utils/format';
   import { calculateUpgradeCost, calculateMoraleCost, TACTIC_MODIFIERS, canAffordUpgrade, getChallengeGoalWins, getChallengeRestriction, getTotalChallengeReward, getNextLevelReward } from '$lib/game/formulas';
   import type { MatchTactic, ChallengeRestriction } from '$lib/game/types';
@@ -41,6 +41,10 @@
   // Badge counts for tabs
   const upgradesBuyable = $derived($affordableUpgradesCount);
   const repUpgradesBuyable = $derived($affordableRepUpgradesCount);
+
+  // Auto-match
+  const autoMatchInterval = $derived($autoMatchIntervalStore);
+  const timeUntilAutoMatch = $derived($timeUntilAutoMatchStore);
 
   // End Season modal state
   let showEndSeasonModal = $state(false);
@@ -390,6 +394,19 @@
           <span class="challenge-name">{currentChallenge.name} L{currentChallenge.attemptingLevel}</span>
           <span class="challenge-restriction">{getShortRestrictionText(getChallengeRestriction(currentChallenge, currentChallenge.attemptingLevel))}</span>
           <span class="challenge-wins">{currentChallenge.currentWins}/{getChallengeGoalWins(currentChallenge, currentChallenge.attemptingLevel)} wins</span>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Auto-Match Indicator -->
+    {#if autoMatchInterval !== null}
+      <div class="header-auto-match-bar">
+        <div class="auto-match-indicator">
+          <svg class="auto-match-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+          <span class="auto-match-label">Auto-Match</span>
+          <span class="auto-match-countdown">{Math.ceil(timeUntilAutoMatch ?? 0)}s</span>
         </div>
       </div>
     {/if}
@@ -1449,6 +1466,51 @@
     padding: 0.15rem 0.5rem;
     background: rgba(255, 255, 255, 0.15);
     border-radius: var(--radius-sm);
+  }
+
+  /* Auto-Match Bar in Header */
+  .header-auto-match-bar {
+    background: linear-gradient(90deg, var(--ice-blue) 0%, rgba(96, 165, 250, 0.6) 100%);
+    padding: var(--space-xs) var(--space-md);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .auto-match-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    font-family: var(--font-score);
+    font-size: 0.75rem;
+    color: var(--ice-white);
+  }
+
+  .auto-match-icon {
+    width: 14px;
+    height: 14px;
+    opacity: 0.9;
+    animation: spin-slow 3s linear infinite;
+  }
+
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .auto-match-label {
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .auto-match-countdown {
+    font-family: var(--font-score);
+    font-weight: bold;
+    padding: 0.1rem 0.4rem;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+    min-width: 35px;
+    text-align: center;
   }
 
   /* Main */

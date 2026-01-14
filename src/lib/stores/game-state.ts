@@ -27,6 +27,22 @@ import {
 const STORAGE_KEY = 'ice-dynasty-save';
 
 /**
+ * Calculate auto-match interval based on Improved Jockstraps upgrade level
+ * Level 0: No auto-match
+ * Level 1: 120 seconds
+ * Level 10: ~30 seconds (15% reduction per level)
+ */
+function getAutoMatchInterval(state: GameState): number | null {
+  const jockstraps = state.upgrades.find((u) => u.id === 'improved_jockstraps');
+  if (!jockstraps || jockstraps.level === 0) return null;
+
+  const baseInterval = 120; // 2 minutes in seconds
+  const reductionPerLevel = 0.15; // 15% reduction per level
+  const interval = baseInterval * Math.pow(1 - reductionPerLevel, jockstraps.level - 1);
+  return Math.max(30, interval); // Minimum 30 seconds
+}
+
+/**
  * Check if an upgrade's unlock condition is met
  */
 function isUpgradeUnlocked(upgrade: Upgrade, state: GameState): boolean {
@@ -503,6 +519,16 @@ function createGameStore() {
           lastTick: Date.now(),
         };
       });
+
+      // Check for auto-match (Improved Jockstraps upgrade)
+      const currentState = get({ subscribe });
+      const autoMatchInterval = getAutoMatchInterval(currentState);
+      if (autoMatchInterval !== null) {
+        const timeSinceLastMatch = (Date.now() - currentState.lastMatchTime) / 1000;
+        if (timeSinceLastMatch >= autoMatchInterval && canPlayMatch(currentState)) {
+          this.playMatch();
+        }
+      }
 
       // Check time-based achievements and challenge unlocks periodically (every ~5 seconds)
       if (Math.random() < deltaSeconds / 5) {
@@ -1019,41 +1045,21 @@ function createGameStore() {
     },
 
     /**
-     * Reset game (for testing)
-     * Preserves: reputation, reputation upgrades (purchased state), completed challenges (permanent progress)
+     * Reset game (for dev testing)
+     * Complete reset - clears everything including localStorage
      */
     reset() {
-      const currentState = get({ subscribe });
-
-      // Preserve permanent progress
-      const preservedReputation = currentState.resources.reputation;
-
-      // Preserve purchased state but use current upgrade definitions
-      const preservedRepUpgrades = INITIAL_REPUTATION_UPGRADES.map((initialUpgrade) => {
-        const savedUpgrade = currentState.reputationUpgrades.find((u) => u.id === initialUpgrade.id);
-        if (savedUpgrade) {
-          return { ...initialUpgrade, purchased: savedUpgrade.purchased };
-        }
-        return initialUpgrade;
-      });
-
-      const preservedChallenges = currentState.challenges;
-
       set({
         ...INITIAL_GAME_STATE,
         upgrades: [...INITIAL_UPGRADES],
-        resources: {
-          ...INITIAL_GAME_STATE.resources,
-          reputation: preservedReputation,
-        },
-        reputationUpgrades: preservedRepUpgrades,
-        challenges: preservedChallenges,
+        achievements: [...INITIAL_ACHIEVEMENTS],
+        challenges: [...INITIAL_CHALLENGES],
+        reputationUpgrades: [...INITIAL_REPUTATION_UPGRADES],
       });
 
-      // Save the new state (with preserved progress) to localStorage
-      const newState = get({ subscribe });
+      // Clear localStorage completely
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+        localStorage.removeItem(STORAGE_KEY);
       }
     },
 
@@ -1145,6 +1151,28 @@ export const MATCH_UNLOCK_THRESHOLD = 3000;
 export const matchesUnlocked = derived(
   gameState,
   ($state) => canPlayMatch($state)
+);
+
+/**
+ * Auto-match interval in seconds (null if auto-match is not enabled)
+ * From "Improved Jockstraps" upgrade
+ */
+export const autoMatchInterval = derived(
+  gameState,
+  ($state) => getAutoMatchInterval($state)
+);
+
+/**
+ * Time until next auto-match in seconds (null if auto-match is not enabled)
+ */
+export const timeUntilAutoMatch = derived(
+  gameState,
+  ($state) => {
+    const interval = getAutoMatchInterval($state);
+    if (interval === null) return null;
+    const elapsed = (Date.now() - $state.lastMatchTime) / 1000;
+    return Math.max(0, interval - elapsed);
+  }
 );
 
 /**
