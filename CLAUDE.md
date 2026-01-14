@@ -280,3 +280,39 @@ async (page) => {
 2. `browser_snapshot` för att se state
 3. `browser_click` för att klicka element
 4. `browser_run_code` för komplexa sekvenser
+
+## Challenge System Balance (AD-style)
+
+### Challenge Level System
+- 8 challenges × 5 levels = 40 total levels
+- Each level has increasing difficulty and stacking rewards
+- Difficulty scaling: `[1.0, 1.5, 2.0, 3.0, 5.0]`
+- Reward scaling: `[1.0, 1.3, 1.5, 1.7, 2.0]` (total 7.5x base at L5)
+
+### Optimal Challenge Order
+Based on reward synergies:
+
+| Order | Challenge | Reward | Strategy |
+|-------|-----------|--------|----------|
+| 1 | **Rookie Season** | +win chance | Makes all others easier |
+| 2 | **Intensive Training** | +training rate | Speeds up passive gains |
+| 3 | **All-Out Attack** | +money gain | Enables more upgrades |
+| 4 | **Defensive Grind** | +fan gain | Build fanbase |
+| 5 | **Budget Season** | +fan gain | No money restriction |
+| 6 | **No Upgrades** | +all stats | Multiplicative bonus |
+| 7 | **Speed Run** | +reputation | Timed - needs practice |
+| 8 | **Marathon** | +all stats | Very long (50-200 wins) |
+
+### Balance Test Results (10000x speed)
+- Match unlock: ~27ms (100 training minutes)
+- Challenge L1 completion: ~1-2 seconds per challenge (10 wins each)
+- All 8 challenges L1: ~20 seconds total real-time
+- Marathon L5 (200 wins): Significantly longer
+
+### Level Difficulty Examples
+| Challenge | L1 | L2 | L3 | L4 | L5 |
+|-----------|-----|-----|-----|-----|-----|
+| Rookie Season | 50% cap | 45% | 40% | 35% | 30% |
+| Speed Run | 180s | 120s | 90s | 60s | 30s |
+| Marathon | 50 wins | 75 | 100 | 150 | 200 |
+| Intensive Training | 5% decay | 7% | 10% | 15% | 25% |

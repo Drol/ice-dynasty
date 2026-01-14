@@ -104,28 +104,65 @@ export interface Achievement {
   badge?: string; // For cosmetic rewards
 }
 
+/**
+ * Challenge restriction types for special seasons
+ */
+export type ChallengeRestrictionType =
+  | 'winChanceCap'    // C1: Max win chance capped
+  | 'noMoney'         // C2: No money from matches or passive
+  | 'trainingDecay'   // C3: Training decays over time
+  | 'forcedTactic'    // C4/C5: Locked to specific tactic
+  | 'noUpgrades'      // C6: Can't buy season upgrades
+  | 'timeLimit'       // C7: Must complete within time
+  | 'highGoal';       // C8: Higher win requirement
+
+export interface ChallengeRestriction {
+  type: ChallengeRestrictionType;
+  value?: number | string; // e.g., 0.4 for 40% cap, 'offensive' for forced tactic
+}
+
+/**
+ * Challenge reward types
+ */
+export type ChallengeRewardType = 'winChance' | 'fanGain' | 'trainingRate' | 'moneyGain' | 'clickPower' | 'reputationGain' | 'allStats';
+
+/**
+ * Challenge - Special seasons with restrictions (like Infinity Challenges in AD)
+ * Now with level system (1-5) - each level is harder but gives more reward.
+ * All challenges available from start, can only attempt next level.
+ */
 export interface Challenge {
   id: string;
   name: string;
   description: string;
-  restriction: string; // What's limited during the challenge
-  goal: string; // What you need to do to complete it
-  rewardDescription: string;
-  rewardType: 'fanGain' | 'trainingRate' | 'baseMoney' | 'clickPower' | 'winChance';
-  rewardValue: number;
-  unlockCondition: {
-    type: 'matchesPlayed' | 'fans' | 'money' | 'matchesWon';
+
+  // Level system (1-5)
+  maxLevel: number;  // Always 5
+  currentLevel: number;  // 0 = not completed, 1-5 = completed levels
+
+  // Base values (for level 1)
+  baseRestriction: ChallengeRestriction;
+  baseGoalWins: number;
+  baseReward: {
+    type: ChallengeRewardType;
     value: number;
+    description: string;
   };
-  // Completion requirements
-  completionType: 'winMatches' | 'consecutiveWins' | 'winWithoutUpgrades';
-  completionValue: number;
-  // State
-  unlocked: boolean;
-  completed: boolean;
+
+  // Scaling per level (indices 0-4 for levels 1-5)
+  // difficultyScaling affects the restriction value
+  // rewardScaling affects the reward multiplier
+  difficultyScaling: number[];  // e.g., [1.0, 1.5, 2.0, 3.0, 5.0]
+  rewardScaling: number[];      // e.g., [1.0, 1.3, 1.5, 1.7, 2.0]
+
+  // For challenges that scale goalWins (like Marathon)
+  goalWinsScaling?: number[];  // e.g., [1.0, 1.5, 2.0, 3.0, 4.0] for Marathon: 50→75→100→150→200
+
+  // Runtime state
   active: boolean;
-  // Progress tracking (while active)
-  progress: number;
+  attemptingLevel: number;  // 1-5, which level being attempted (0 = not active)
+  currentWins: number;
+  currentLosses: number;  // For tracking flawless runs
   startedAt?: number;
 }
 
@@ -208,45 +245,45 @@ export const INITIAL_UPGRADES: Upgrade[] = [
   {
     id: 'better_skates',
     name: 'Better Skates',
-    description: '+1 training per click',
+    description: '+30 training per click',
     level: 0,
     maxLevel: 50,
-    baseCost: 10,
+    baseCost: 50,
     costMultiplier: 1.5,
-    effect: 1,
+    effect: 30,
     type: 'click',
   },
   {
     id: 'training_rink',
     name: 'Training Rink',
-    description: '+0.5 training per second',
+    description: '+15 training per second',
     level: 0,
     maxLevel: 100,
-    baseCost: 50,
+    baseCost: 300,
     costMultiplier: 1.4,
-    effect: 0.5,
+    effect: 15,
     type: 'training',
   },
   {
     id: 'hockey_sticks',
     name: 'Better Sticks',
-    description: '+2 training per click',
+    description: '+60 training per click',
     level: 0,
     maxLevel: 40,
-    baseCost: 25,
+    baseCost: 100,
     costMultiplier: 1.6,
-    effect: 2,
+    effect: 60,
     type: 'click',
   },
   {
     id: 'volunteer_coaches',
     name: 'Volunteer Coaches',
-    description: '+1 training per second',
+    description: '+30 training per second',
     level: 0,
     maxLevel: 75,
-    baseCost: 100,
+    baseCost: 800,
     costMultiplier: 1.5,
-    effect: 1,
+    effect: 30,
     type: 'training',
   },
 
@@ -257,7 +294,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: '+10% fan gain from matches',
     level: 0,
     maxLevel: 25,
-    baseCost: 200,
+    baseCost: 1000,
     costMultiplier: 1.8,
     effect: 0.1,
     type: 'fans',
@@ -268,7 +305,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: '+20% money from matches',
     level: 0,
     maxLevel: 25,
-    baseCost: 500,
+    baseCost: 2500,
     costMultiplier: 2.0,
     effect: 0.2,
     type: 'money',
@@ -279,7 +316,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: '+2.5% win chance',
     level: 0,
     maxLevel: 20,
-    baseCost: 150,
+    baseCost: 500,
     costMultiplier: 1.7,
     effect: 0.025,
     type: 'winChance',
@@ -292,7 +329,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: 'Multiplies click power by 1.1x',
     level: 0,
     maxLevel: 15,
-    baseCost: 400,
+    baseCost: 2000,
     costMultiplier: 2.0,
     effect: 0.1,
     type: 'clickMult',
@@ -304,7 +341,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: '+$25 base match income',
     level: 0,
     maxLevel: 30,
-    baseCost: 750,
+    baseCost: 3750,
     costMultiplier: 1.8,
     effect: 25,
     type: 'baseMoney',
@@ -316,7 +353,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: '+5% money and +5% fans from matches',
     level: 0,
     maxLevel: 20,
-    baseCost: 1000,
+    baseCost: 5000,
     costMultiplier: 1.9,
     effect: 0.05,
     type: 'combo',
@@ -325,12 +362,12 @@ export const INITIAL_UPGRADES: Upgrade[] = [
   {
     id: 'outdoor_flooding',
     name: 'Outdoor Flooding',
-    description: '+3 training per second',
+    description: '+100 training per second',
     level: 0,
     maxLevel: 50,
-    baseCost: 2500,
+    baseCost: 12500,
     costMultiplier: 1.6,
-    effect: 3,
+    effect: 100,
     type: 'training',
     unlockCondition: { type: 'matchesPlayed', value: 100 },
   },
@@ -342,7 +379,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: '+50% fan gain from matches',
     level: 0,
     maxLevel: 15,
-    baseCost: 5000,
+    baseCost: 25000,
     costMultiplier: 2.2,
     effect: 0.5,
     type: 'fans',
@@ -354,7 +391,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: '+100% match rewards when winning',
     level: 0,
     maxLevel: 10,
-    baseCost: 10000,
+    baseCost: 50000,
     costMultiplier: 2.5,
     effect: 1.0,
     type: 'winBonus',
@@ -366,7 +403,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
     description: 'All training +25%',
     level: 0,
     maxLevel: 5,
-    baseCost: 25000,
+    baseCost: 125000,
     costMultiplier: 3.0,
     effect: 0.25,
     type: 'trainingMult',
@@ -506,93 +543,245 @@ export const INITIAL_ACHIEVEMENTS: Achievement[] = [
     rewardType: 'cosmetic',
     badge: '🏆',
   },
-];
 
-export const INITIAL_CHALLENGES: Challenge[] = [
+  // Challenge Achievements
   {
-    id: 'rookie_mode',
-    name: 'Rookie Mode',
-    description: 'Play with a capped win chance to prove your fundamentals.',
-    restriction: 'Win chance capped at 50%',
-    goal: 'Win 10 matches',
-    rewardDescription: '+10% base fan gain permanently',
-    rewardType: 'fanGain',
-    rewardValue: 0.1,
-    unlockCondition: { type: 'matchesPlayed', value: 10 },
-    completionType: 'winMatches',
-    completionValue: 10,
+    id: 'challenge_initiate',
+    name: 'Challenge Initiate',
+    description: 'Complete any challenge at level 1',
     unlocked: false,
-    completed: false,
-    active: false,
-    progress: 0,
+    rewardType: 'bonus',
+    bonusType: 'all',
+    bonusValue: 0.05, // +5% all stats
   },
   {
-    id: 'fatigue_test',
-    name: 'Fatigue Test',
-    description: 'Survive without passive training income.',
-    restriction: 'No passive training (clicks only)',
-    goal: 'Win 5 matches',
-    rewardDescription: '+15% training rate permanently',
-    rewardType: 'trainingRate',
-    rewardValue: 0.15,
-    unlockCondition: { type: 'fans', value: 500 },
-    completionType: 'winMatches',
-    completionValue: 5,
+    id: 'challenger',
+    name: 'Challenger',
+    description: 'Complete all 8 challenges at level 1',
     unlocked: false,
-    completed: false,
+    rewardType: 'bonus',
+    bonusType: 'all',
+    bonusValue: 0.1, // +10% all stats
+  },
+  {
+    id: 'challenge_veteran',
+    name: 'Veteran',
+    description: 'Complete 5 challenges at level 3',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'trainingRate',
+    bonusValue: 0.15, // +15% training rate
+  },
+  {
+    id: 'perfectionist',
+    name: 'Perfectionist',
+    description: 'Complete all 8 challenges at level 5',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'all',
+    bonusValue: 0.5, // +50% all stats
+  },
+  {
+    id: 'flawless_run',
+    name: 'Flawless Run',
+    description: 'Complete a challenge without losing a match',
+    unlocked: false,
+    rewardType: 'bonus',
+    bonusType: 'winChance',
+    bonusValue: 0.1, // +10% win chance
+  },
+  {
+    id: 'speed_challenger',
+    name: 'Speed Challenger',
+    description: 'Complete Speed Run at level 3',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '⏱️',
+  },
+  {
+    id: 'marathon_legend',
+    name: 'Marathon Legend',
+    description: 'Complete Marathon at level 5',
+    unlocked: false,
+    rewardType: 'cosmetic',
+    badge: '🏅',
+  },
+];
+
+/**
+ * Default scaling arrays for challenges
+ * difficultyScaling: How much harder each level is (multiplies restriction values)
+ * rewardScaling: How much reward each level gives (multiplies base reward)
+ */
+const DEFAULT_DIFFICULTY_SCALING = [1.0, 1.5, 2.0, 3.0, 5.0];
+const DEFAULT_REWARD_SCALING = [1.0, 1.3, 1.5, 1.7, 2.0];
+
+/**
+ * Challenges are special seasons with restrictions (like Infinity Challenges in AD)
+ * All challenges available from start with 5 levels each.
+ * Each level is progressively harder but gives stacking rewards.
+ */
+export const INITIAL_CHALLENGES: Challenge[] = [
+  {
+    id: 'rookie_season',
+    name: 'Rookie Season',
+    description: 'Prove you can win even when the odds are against you.',
+    maxLevel: 5,
+    currentLevel: 0,
+    baseRestriction: { type: 'winChanceCap', value: 0.5 },  // L1: 50%, L2: 45%, L3: 40%, L4: 35%, L5: 30%
+    baseGoalWins: 10,
+    baseReward: {
+      type: 'winChance',
+      value: 0.01,  // +1% per level (total +7.5% at L5)
+      description: '+1% permanent win chance',
+    },
+    difficultyScaling: [1.0, 1.11, 1.25, 1.43, 1.67],  // 50%→45%→40%→35%→30%
+    rewardScaling: DEFAULT_REWARD_SCALING,
     active: false,
-    progress: 0,
+    attemptingLevel: 0,
+    currentWins: 0,
+    currentLosses: 0,
   },
   {
     id: 'budget_season',
     name: 'Budget Season',
-    description: 'Play through a cash-strapped season.',
-    restriction: 'No money earned from matches',
-    goal: 'Win 10 matches',
-    rewardDescription: '+30% base money permanently',
-    rewardType: 'baseMoney',
-    rewardValue: 0.3,
-    unlockCondition: { type: 'money', value: 5000 },
-    completionType: 'winMatches',
-    completionValue: 10,
-    unlocked: false,
-    completed: false,
+    description: 'Complete a season without any money income.',
+    maxLevel: 5,
+    currentLevel: 0,
+    baseRestriction: { type: 'noMoney' },  // L2+: also reduces training rate
+    baseGoalWins: 10,
+    baseReward: {
+      type: 'fanGain',
+      value: 0.04,  // +4% per level (total +30% at L5)
+      description: '+4% permanent fan gain',
+    },
+    difficultyScaling: [1.0, 1.0, 1.0, 1.0, 1.0],  // noMoney doesn't scale numerically, handled specially
+    rewardScaling: DEFAULT_REWARD_SCALING,
     active: false,
-    progress: 0,
+    attemptingLevel: 0,
+    currentWins: 0,
+    currentLosses: 0,
+  },
+  {
+    id: 'intensive_training',
+    name: 'Intensive Training',
+    description: 'Your training decays rapidly. Keep clicking!',
+    maxLevel: 5,
+    currentLevel: 0,
+    baseRestriction: { type: 'trainingDecay', value: 0.05 },  // L1: 5%, L2: 7%, L3: 10%, L4: 15%, L5: 25%
+    baseGoalWins: 10,
+    baseReward: {
+      type: 'trainingRate',
+      value: 0.06,  // +6% per level (total +45% at L5)
+      description: '+6% permanent training rate',
+    },
+    difficultyScaling: [1.0, 1.4, 2.0, 3.0, 5.0],  // 5%→7%→10%→15%→25%
+    rewardScaling: DEFAULT_REWARD_SCALING,
+    active: false,
+    attemptingLevel: 0,
+    currentWins: 0,
+    currentLosses: 0,
+  },
+  {
+    id: 'all_out_attack',
+    name: 'All-Out Attack',
+    description: 'Locked to Offensive tactic with increasing penalties.',
+    maxLevel: 5,
+    currentLevel: 0,
+    baseRestriction: { type: 'forcedTactic', value: 'offensive' },  // L2+: extra win penalty
+    baseGoalWins: 10,
+    baseReward: {
+      type: 'moneyGain',
+      value: 0.05,  // +5% per level (total +37.5% at L5)
+      description: '+5% permanent match money',
+    },
+    difficultyScaling: [1.0, 1.1, 1.2, 1.3, 1.4],  // 0%→10%→20%→30%→40% extra penalty
+    rewardScaling: DEFAULT_REWARD_SCALING,
+    active: false,
+    attemptingLevel: 0,
+    currentWins: 0,
+    currentLosses: 0,
+  },
+  {
+    id: 'defensive_grind',
+    name: 'Defensive Grind',
+    description: 'Locked to Defensive tactic. Increasingly slow.',
+    maxLevel: 5,
+    currentLevel: 0,
+    baseRestriction: { type: 'forcedTactic', value: 'defensive' },  // L2+: slower training
+    baseGoalWins: 10,
+    baseReward: {
+      type: 'fanGain',
+      value: 0.05,  // +5% per level (total +37.5% at L5)
+      description: '+5% permanent fan gain from matches',
+    },
+    difficultyScaling: [1.0, 1.2, 1.4, 1.6, 1.8],  // 0%→20%→40%→60%→80% slower
+    rewardScaling: DEFAULT_REWARD_SCALING,
+    active: false,
+    attemptingLevel: 0,
+    currentWins: 0,
+    currentLosses: 0,
+  },
+  {
+    id: 'no_upgrades',
+    name: 'No Upgrades',
+    description: 'Complete a season without buying any upgrades.',
+    maxLevel: 5,
+    currentLevel: 0,
+    baseRestriction: { type: 'noUpgrades' },  // L2+: increased match cost
+    baseGoalWins: 10,
+    baseReward: {
+      type: 'allStats',
+      value: 0.02,  // +2% per level (total +15% at L5)
+      description: '+2% to all stats permanently',
+    },
+    difficultyScaling: [1.0, 2.0, 3.0, 4.0, 5.0],  // Match cost multiplier
+    rewardScaling: DEFAULT_REWARD_SCALING,
+    active: false,
+    attemptingLevel: 0,
+    currentWins: 0,
+    currentLosses: 0,
+  },
+  {
+    id: 'speed_run',
+    name: 'Speed Run',
+    description: 'Complete the season within time limit.',
+    maxLevel: 5,
+    currentLevel: 0,
+    baseRestriction: { type: 'timeLimit', value: 180 },  // L1: 180s, L2: 120s, L3: 90s, L4: 60s, L5: 30s
+    baseGoalWins: 10,
+    baseReward: {
+      type: 'reputationGain',
+      value: 0.1,  // +10% per level (total +75% at L5)
+      description: '+10% permanent reputation gain',
+    },
+    difficultyScaling: [1.0, 1.5, 2.0, 3.0, 6.0],  // 180/x = 180, 120, 90, 60, 30
+    rewardScaling: DEFAULT_REWARD_SCALING,
+    active: false,
+    attemptingLevel: 0,
+    currentWins: 0,
+    currentLosses: 0,
   },
   {
     id: 'marathon',
     name: 'Marathon',
-    description: 'Prove your consistency with a winning streak.',
-    restriction: 'Must win consecutively (resets on loss)',
-    goal: 'Win 5 matches in a row',
-    rewardDescription: '+20% click power permanently',
-    rewardType: 'clickPower',
-    rewardValue: 0.2,
-    unlockCondition: { type: 'matchesWon', value: 25 },
-    completionType: 'consecutiveWins',
-    completionValue: 5,
-    unlocked: false,
-    completed: false,
+    description: 'A grueling long season. Only for the dedicated.',
+    maxLevel: 5,
+    currentLevel: 0,
+    baseRestriction: { type: 'highGoal', value: 50 },
+    baseGoalWins: 50,  // L1: 50, L2: 75, L3: 100, L4: 150, L5: 200
+    baseReward: {
+      type: 'allStats',
+      value: 0.05,  // +5% per level (total +37.5% at L5)
+      description: '+5% to all stats permanently',
+    },
+    difficultyScaling: DEFAULT_DIFFICULTY_SCALING,
+    rewardScaling: DEFAULT_REWARD_SCALING,
+    goalWinsScaling: [1.0, 1.5, 2.0, 3.0, 4.0],  // 50→75→100→150→200
     active: false,
-    progress: 0,
-  },
-  {
-    id: 'underdog',
-    name: 'Underdog',
-    description: 'Win without relying on click upgrades.',
-    restriction: 'Click upgrades disabled',
-    goal: 'Win 3 matches',
-    rewardDescription: '+5% win chance permanently',
-    rewardType: 'winChance',
-    rewardValue: 0.05,
-    unlockCondition: { type: 'matchesWon', value: 50 },
-    completionType: 'winWithoutUpgrades',
-    completionValue: 3,
-    unlocked: false,
-    completed: false,
-    active: false,
-    progress: 0,
+    attemptingLevel: 0,
+    currentWins: 0,
+    currentLosses: 0,
   },
 ];
 
@@ -600,10 +789,10 @@ export const INITIAL_REPUTATION_UPGRADES: ReputationUpgrade[] = [
   {
     id: 'veteran_coach',
     name: 'Veteran Coach',
-    description: '+50% base training rate',
+    description: '+200% base training rate',
     cost: 5,
     purchased: false,
-    effect: { type: 'trainingRate', value: 0.5 },
+    effect: { type: 'trainingRate', value: 2.0 },
   },
   {
     id: 'better_facilities',
@@ -640,10 +829,10 @@ export const INITIAL_REPUTATION_UPGRADES: ReputationUpgrade[] = [
   {
     id: 'training_methods',
     name: 'Training Methods',
-    description: '+100% click power',
+    description: '+300% click power',
     cost: 30,
     purchased: false,
-    effect: { type: 'clickPower', value: 1.0 },
+    effect: { type: 'clickPower', value: 3.0 },
   },
   {
     id: 'business_acumen',
@@ -665,9 +854,11 @@ export const INITIAL_REPUTATION_UPGRADES: ReputationUpgrade[] = [
 
 /**
  * Calculate season goal (wins needed) based on season number
+ * Goal stays constant - speedup comes from reputation upgrades, not lower goals
+ * This mirrors AD where Infinity goal is always the same, but you get faster
  */
 export function getSeasonGoal(seasonNumber: number): number {
-  return 10 + (seasonNumber - 1) * 5; // 10, 15, 20, 25...
+  return 10; // Always 10 wins - like AD's constant Infinity goal
 }
 
 export const INITIAL_GAME_STATE: GameState = {

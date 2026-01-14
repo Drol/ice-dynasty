@@ -3,22 +3,25 @@
  * All game math is centralized here for easy balancing
  */
 
-import type { GameState, Era, Upgrade, MatchResult, MatchTactic, ReputationUpgrade, Challenge } from './types';
+import type { GameState, Era, Upgrade, MatchResult, MatchTactic, ReputationUpgrade, Challenge, ChallengeRewardType, ChallengeRestriction } from './types';
 
 /**
  * Base training per second when starting
+ * Target: First season ~6-12 hours, like AD's first Infinity
+ * With active clicking, first match takes ~5-10 min
+ * Without clicking, first match takes ~50 min
  */
 export const BASE_TRAINING_RATE = 1;
 
 /**
  * Base click power (training per click)
  */
-export const BASE_CLICK_POWER = 1;
+export const BASE_CLICK_POWER = 30;
 
 /**
- * Match cooldown in milliseconds (30 seconds base)
+ * Base match cost in training minutes (matches cost training, no cooldown)
  */
-export const MATCH_COOLDOWN = 30000;
+export const BASE_MATCH_COST = 3000;
 
 /**
  * Morale constants
@@ -70,15 +73,16 @@ export function calculateTrainingRate(state: GameState): number {
 
   // Challenge reward bonus (permanent)
   const challengeTrainingBonus = 1 + getChallengeBonus(state.challenges, 'trainingRate');
+  const allStatsBonus = 1 + getChallengeAllStatsBonus(state.challenges);
 
-  return (baseRate + upgradeBonus) * eraMultiplier * trainingMult * moraleMult * devMultiplier * repTrainingBonus * challengeTrainingBonus;
+  return (baseRate + upgradeBonus) * eraMultiplier * trainingMult * moraleMult * devMultiplier * repTrainingBonus * challengeTrainingBonus * allStatsBonus;
 }
 
 /**
  * Base passive income rate per fan per second
- * Each fan generates $0.1 per second base
+ * Each fan generates $0.01 per second base (slowed down)
  */
-export const BASE_INCOME_PER_FAN = 0.1;
+export const BASE_INCOME_PER_FAN = 0.01;
 
 /**
  * Calculate passive money income per second from fans
@@ -114,8 +118,9 @@ export function calculateClickPower(state: GameState): number {
 
   // Challenge reward bonus (permanent)
   const challengeClickBonus = 1 + getChallengeBonus(state.challenges, 'clickPower');
+  const allStatsBonus = 1 + getChallengeAllStatsBonus(state.challenges);
 
-  return (basePower + upgradeBonus) * clickMult * eraMultiplier * moraleMult * repClickBonus * challengeClickBonus;
+  return (basePower + upgradeBonus) * clickMult * eraMultiplier * moraleMult * repClickBonus * challengeClickBonus * allStatsBonus;
 }
 
 /**
@@ -151,14 +156,14 @@ export function calculateUpgradeCost(upgrade: Upgrade): number {
 }
 
 /**
- * Check if player can afford an upgrade
+ * Check if player can afford an upgrade (costs Money)
  */
 export function canAffordUpgrade(state: GameState, upgradeId: string): boolean {
   const upgrade = state.upgrades.find((u) => u.id === upgradeId);
   if (!upgrade || upgrade.level >= upgrade.maxLevel) return false;
 
   const cost = calculateUpgradeCost(upgrade);
-  return state.training.minutes >= cost;
+  return state.resources.money >= cost;
 }
 
 /**
@@ -176,7 +181,10 @@ export function calculateWinChance(state: GameState): number {
   // Challenge reward bonus (permanent)
   const challengeWinBonus = getChallengeBonus(state.challenges, 'winChance');
 
-  return Math.min(0.9, Math.max(0.1, 0.4 + trainingBonus + winChanceBonus + moraleBonus + tacticBonus + repWinBonus + challengeWinBonus));
+  // All stats bonus from challenges
+  const allStatsBonus = getChallengeAllStatsBonus(state.challenges);
+
+  return Math.min(0.9, Math.max(0.1, 0.4 + trainingBonus + winChanceBonus + moraleBonus + tacticBonus + repWinBonus + challengeWinBonus + allStatsBonus));
 }
 
 /**
@@ -199,14 +207,15 @@ export function simulateMatch(state: GameState): MatchResult {
 
   // Challenge reward bonuses (permanent)
   const challengeFanBonus = 1 + getChallengeBonus(state.challenges, 'fanGain');
-  const challengeMoneyBonus = 1 + getChallengeBonus(state.challenges, 'baseMoney');
+  const challengeMoneyBonus = 1 + getChallengeBonus(state.challenges, 'moneyGain');
+  const allStatsBonus = 1 + getChallengeAllStatsBonus(state.challenges);
 
   // Calculate rewards with tactic modifiers
   const baseFanGain = won ? 15 : 5;
   const fanMultiplier = getUpgradeMultiplier(state.upgrades, 'fans');
   const comboMultiplier = getUpgradeMultiplier(state.upgrades, 'combo');
   const fansGained = Math.floor(
-    baseFanGain * fanMultiplier * comboMultiplier * tactic.fanGain * getEraMultiplier(state.era) * challengeFanBonus
+    baseFanGain * fanMultiplier * comboMultiplier * tactic.fanGain * getEraMultiplier(state.era) * challengeFanBonus * allStatsBonus
   );
 
   const baseMoneyAddition = getUpgradeBonus(state.upgrades, 'baseMoney');
@@ -214,7 +223,7 @@ export function simulateMatch(state: GameState): MatchResult {
   const moneyMultiplier = getUpgradeMultiplier(state.upgrades, 'money');
   const winBonusMultiplier = won ? 1.5 + getUpgradeBonus(state.upgrades, 'winBonus') : 1;
   const moneyEarned = Math.floor(
-    baseMoneyGain * moneyMultiplier * comboMultiplier * winBonusMultiplier * tactic.money * challengeMoneyBonus
+    baseMoneyGain * moneyMultiplier * comboMultiplier * winBonusMultiplier * tactic.money * challengeMoneyBonus * allStatsBonus
   );
 
   return {
@@ -229,18 +238,22 @@ export function simulateMatch(state: GameState): MatchResult {
 /**
  * Check if enough time has passed to play another match
  */
-export function canPlayMatch(state: GameState): boolean {
-  const cooldown = MATCH_COOLDOWN / state.dev.speedMultiplier;
-  return Date.now() - state.lastMatchTime >= cooldown;
+/**
+ * Calculate match cost in training minutes
+ * Cost increases with season number
+ */
+export function getMatchCost(state: GameState): number {
+  const baseCost = BASE_MATCH_COST;
+  const seasonScaling = (state.season.number - 1) * 300; // +300 per season after first (~10%)
+  return baseCost + seasonScaling;
 }
 
 /**
- * Get remaining cooldown time in milliseconds
+ * Check if player can afford to play a match
  */
-export function getMatchCooldown(state: GameState): number {
-  const cooldown = MATCH_COOLDOWN / state.dev.speedMultiplier;
-  const elapsed = Date.now() - state.lastMatchTime;
-  return Math.max(0, cooldown - elapsed);
+export function canPlayMatch(state: GameState): boolean {
+  const cost = getMatchCost(state);
+  return state.training.minutes >= cost;
 }
 
 /**
@@ -291,18 +304,128 @@ export function getStartingMoney(state: GameState): number {
   return getReputationUpgradeBonus(state.reputationUpgrades, 'startMoney');
 }
 
-// ========== CHALLENGE REWARD HELPERS ==========
+// ========== CHALLENGE LEVEL SYSTEM HELPERS ==========
+
+/**
+ * Get the total reward from all completed levels of a challenge
+ * Each level stacks: total = sum of (baseValue * rewardScaling[i]) for levels 1 to currentLevel
+ */
+export function getTotalChallengeReward(challenge: Challenge): number {
+  if (challenge.currentLevel === 0) return 0;
+
+  let total = 0;
+  for (let i = 0; i < challenge.currentLevel; i++) {
+    total += challenge.baseReward.value * challenge.rewardScaling[i];
+  }
+  return total;
+}
+
+/**
+ * Get the reward value for a specific level (preview)
+ */
+export function getLevelReward(challenge: Challenge, level: number): number {
+  if (level < 1 || level > challenge.maxLevel) return 0;
+  return challenge.baseReward.value * challenge.rewardScaling[level - 1];
+}
+
+/**
+ * Get the reward for the next uncompleted level
+ */
+export function getNextLevelReward(challenge: Challenge): number {
+  const nextLevel = challenge.currentLevel + 1;
+  if (nextLevel > challenge.maxLevel) return 0;
+  return getLevelReward(challenge, nextLevel);
+}
+
+/**
+ * Get goal wins for a specific level
+ * goalWinsScaling contains multipliers (e.g., [1.0, 1.5, 2.0, 3.0, 4.0])
+ */
+export function getChallengeGoalWins(challenge: Challenge, level: number): number {
+  if (challenge.goalWinsScaling) {
+    const scaling = challenge.goalWinsScaling[level - 1] ?? 1;
+    return Math.round(challenge.baseGoalWins * scaling);
+  }
+  return challenge.baseGoalWins;
+}
+
+/**
+ * Get scaled restriction for a specific level
+ * Applies difficulty scaling to the base restriction value
+ */
+export function getChallengeRestriction(challenge: Challenge, level: number): ChallengeRestriction {
+  const scaling = challenge.difficultyScaling[level - 1] || 1;
+  const base = challenge.baseRestriction;
+
+  // For non-numeric restrictions, return as-is
+  if (base.value === undefined || typeof base.value === 'string') {
+    return { type: base.type, value: base.value };
+  }
+
+  // Scale the numeric restriction value based on difficulty
+  // Higher scaling = harder restriction
+  const baseValue = base.value as number;
+  let scaledValue: number;
+
+  switch (base.type) {
+    case 'winChanceCap':
+      // Lower cap = harder (0.50 → 0.45 → 0.40 → 0.35 → 0.30)
+      scaledValue = baseValue - (scaling - 1) * 0.05;
+      break;
+    case 'noMoney':
+      // Additional training penalty at higher levels (0 → 25% → 50% → 75% → 100%)
+      scaledValue = baseValue + (scaling - 1) * 0.25;
+      break;
+    case 'trainingDecay':
+      // Higher decay = harder (5% → 7% → 10% → 15% → 25%)
+      scaledValue = baseValue * (1 + (scaling - 1) * 0.5);
+      break;
+    case 'forcedTactic':
+      // For forced tactic with numeric penalty (e.g., additional win penalty)
+      scaledValue = baseValue + (scaling - 1) * 0.1;
+      break;
+    case 'noUpgrades':
+      // Additional match cost multiplier at higher levels (1x → 2x → 3x → 4x → 5x)
+      scaledValue = baseValue + (scaling - 1);
+      break;
+    case 'timeLimit':
+      // Shorter time = harder (180 → 120 → 90 → 60 → 30)
+      scaledValue = baseValue / scaling;
+      break;
+    case 'highGoal':
+      // Higher goal wins scaling (50 → 75 → 100 → 150 → 200)
+      scaledValue = baseValue * scaling;
+      break;
+    default:
+      scaledValue = baseValue;
+  }
+
+  return {
+    type: base.type,
+    value: scaledValue,
+  };
+}
 
 /**
  * Get bonus value from completed challenges of a specific reward type
+ * Sums rewards from ALL completed levels across ALL challenges
  */
 export function getChallengeBonus(
   challenges: Challenge[],
-  rewardType: Challenge['rewardType']
+  rewardType: ChallengeRewardType
 ): number {
   return challenges
-    .filter((c) => c.completed && c.rewardType === rewardType)
-    .reduce((total, c) => total + c.rewardValue, 0);
+    .filter((c) => c.currentLevel > 0 && c.baseReward.type === rewardType)
+    .reduce((total, c) => total + getTotalChallengeReward(c), 0);
+}
+
+/**
+ * Get bonus from 'allStats' challenge rewards (applies to everything)
+ */
+export function getChallengeAllStatsBonus(challenges: Challenge[]): number {
+  return challenges
+    .filter((c) => c.currentLevel > 0 && c.baseReward.type === 'allStats')
+    .reduce((total, c) => total + getTotalChallengeReward(c), 0);
 }
 
 // ========== SEASON SYSTEM ==========
@@ -323,7 +446,10 @@ export function calculateReputationGain(state: GameState): number {
   // Reputation upgrade bonus
   const repGainBonus = 1 + getReputationUpgradeBonus(state.reputationUpgrades, 'reputationGain');
 
-  const baseGain = winFactor * fanFactor * speedBonus * repGainBonus;
+  // Challenge reward bonus (permanent)
+  const challengeRepBonus = 1 + getChallengeBonus(state.challenges, 'reputationGain');
+
+  const baseGain = winFactor * fanFactor * speedBonus * repGainBonus * challengeRepBonus;
 
   return Math.max(1, Math.floor(baseGain));
 }

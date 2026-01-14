@@ -15,10 +15,13 @@ import {
   calculateWinChance,
   simulateMatch,
   canPlayMatch,
+  getMatchCost,
   calculateReputationGain,
   canEndSeason,
   getStartingFans,
   getStartingMoney,
+  getChallengeRestriction,
+  getChallengeGoalWins,
 } from '$lib/game/formulas';
 
 const STORAGE_KEY = 'ice-dynasty-save';
@@ -54,6 +57,7 @@ function isUpgradeUnlocked(upgrade: Upgrade, state: GameState): boolean {
 function checkAchievements(state: GameState, context?: {
   lastMatchResult?: MatchResult;
   lastMatchWinChance?: number;
+  challengeCompletedWithoutLoss?: boolean;
 }): string[] {
   const newlyUnlocked: string[] = [];
   const now = Date.now();
@@ -125,6 +129,36 @@ function checkAchievements(state: GameState, context?: {
       case 'first_blood':
         shouldUnlock = state.stats.matchesWon >= 1;
         break;
+
+      // Challenge achievements
+      case 'challenge_initiate':
+        // Any challenge at level 1+
+        shouldUnlock = state.challenges.some(c => c.currentLevel >= 1);
+        break;
+      case 'challenger':
+        // All 8 challenges at level 1+
+        shouldUnlock = state.challenges.every(c => c.currentLevel >= 1);
+        break;
+      case 'challenge_veteran':
+        // 5 challenges at level 3+
+        shouldUnlock = state.challenges.filter(c => c.currentLevel >= 3).length >= 5;
+        break;
+      case 'perfectionist':
+        // All 8 challenges at level 5
+        shouldUnlock = state.challenges.every(c => c.currentLevel >= 5);
+        break;
+      case 'flawless_run':
+        // Completed a challenge without losing - check via context
+        shouldUnlock = !!(context?.challengeCompletedWithoutLoss);
+        break;
+      case 'speed_challenger':
+        // Speed Run at level 3+
+        shouldUnlock = (state.challenges.find(c => c.id === 'speed_run')?.currentLevel ?? 0) >= 3;
+        break;
+      case 'marathon_legend':
+        // Marathon at level 5
+        shouldUnlock = (state.challenges.find(c => c.id === 'marathon')?.currentLevel ?? 0) >= 5;
+        break;
     }
 
     if (shouldUnlock) {
@@ -136,25 +170,11 @@ function checkAchievements(state: GameState, context?: {
 }
 
 /**
- * Check if a challenge's unlock condition is met
+ * Get the current restriction for an active challenge
+ * Returns the restriction scaled to the attempting level
  */
-function isChallengeUnlocked(challenge: Challenge, state: GameState): boolean {
-  if (challenge.unlocked || challenge.completed) return true;
-
-  const { type, value } = challenge.unlockCondition;
-
-  switch (type) {
-    case 'matchesPlayed':
-      return state.stats.matchesPlayed >= value;
-    case 'fans':
-      return state.resources.fans >= value;
-    case 'money':
-      return state.resources.money >= value;
-    case 'matchesWon':
-      return state.stats.matchesWon >= value;
-    default:
-      return false;
-  }
+function getActiveChallengeRestriction(challenge: Challenge) {
+  return getChallengeRestriction(challenge, challenge.attemptingLevel);
 }
 
 /**
@@ -195,21 +215,39 @@ function loadState(): GameState {
         });
       }
 
-      // Merge challenges: keep progress/completed status but add any new challenges
+      // Merge challenges: keep progress but use new definitions for scaling/rewards
       let mergedChallenges = [...INITIAL_CHALLENGES];
       if (parsed.challenges?.length) {
         mergedChallenges = INITIAL_CHALLENGES.map((initialChallenge) => {
           const savedChallenge = parsed.challenges!.find((c) => c.id === initialChallenge.id);
-          return savedChallenge || initialChallenge;
+          if (savedChallenge) {
+            // Migrate old format (completed boolean) to new format (currentLevel)
+            const currentLevel = savedChallenge.currentLevel ?? (savedChallenge as { completed?: boolean }).completed ? 1 : 0;
+            return {
+              ...initialChallenge,  // Use new definitions for scaling, rewards, etc.
+              // Preserve runtime state from save
+              currentLevel,
+              active: savedChallenge.active || false,
+              attemptingLevel: savedChallenge.attemptingLevel || 0,
+              currentWins: savedChallenge.currentWins || 0,
+              currentLosses: savedChallenge.currentLosses || 0,
+              startedAt: savedChallenge.startedAt,
+            };
+          }
+          return initialChallenge;
         });
       }
 
-      // Merge reputation upgrades: keep purchased status but add any new upgrades
+      // Merge reputation upgrades: use current definitions but preserve purchased status from save
       let mergedRepUpgrades = [...INITIAL_REPUTATION_UPGRADES];
       if (parsed.reputationUpgrades?.length) {
         mergedRepUpgrades = INITIAL_REPUTATION_UPGRADES.map((initialUpgrade) => {
           const savedUpgrade = parsed.reputationUpgrades!.find((u) => u.id === initialUpgrade.id);
-          return savedUpgrade || initialUpgrade;
+          if (savedUpgrade) {
+            // Use current definition but preserve purchased state
+            return { ...initialUpgrade, purchased: savedUpgrade.purchased };
+          }
+          return initialUpgrade;
         });
       }
 
@@ -342,6 +380,9 @@ function createGameStore() {
           });
         }
       }
+
+      // Check challenge unlocks on load
+      this.updateChallengeUnlocks();
     },
 
     /**
@@ -398,7 +439,7 @@ function createGameStore() {
 
     /**
      * Game tick - called every frame
-     * Handles passive training generation
+     * Handles passive training generation and challenge restrictions
      */
     tick(deltaSeconds: number) {
       update((state) => {
@@ -406,21 +447,48 @@ function createGameStore() {
 
         // Check for active challenge restrictions
         const activeChallenge = getActiveChallenge(state);
-        const hasPassiveTraining = activeChallenge?.id !== 'fatigue_test';
-        const hasPassiveIncome = activeChallenge?.id !== 'budget_season';
+        const restriction = activeChallenge ? getActiveChallengeRestriction(activeChallenge) : null;
+
+        // No passive income during budget_season challenge
+        const hasPassiveIncome = restriction?.type !== 'noMoney';
 
         // Calculate training gained this tick
-        const trainingRate = hasPassiveTraining ? calculateTrainingRate(state) : 0;
-        const trainingGained = trainingRate * deltaSeconds;
+        const trainingRate = calculateTrainingRate(state);
+        let trainingGained = trainingRate * deltaSeconds;
+
+        // Training decay for intensive_training challenge (5% per second)
+        let trainingDecay = 0;
+        if (restriction?.type === 'trainingDecay') {
+          const decayRate = restriction.value as number || 0.05;
+          trainingDecay = state.training.minutes * decayRate * deltaSeconds;
+        }
 
         // Calculate passive income from fans (economy cascade)
         const incomeRate = hasPassiveIncome ? calculatePassiveIncome(state) : 0;
         const incomeGained = incomeRate * deltaSeconds;
 
+        // Check for speed_run time limit failure
+        let challengeTimedOut = false;
+        if (restriction?.type === 'timeLimit') {
+          const timeLimit = (restriction.value as number) * 1000; // Convert to ms
+          const elapsed = Date.now() - (activeChallenge!.startedAt || Date.now());
+          challengeTimedOut = elapsed > timeLimit;
+        }
+
+        // Handle challenge timeout (abandon it)
+        let challenges = state.challenges;
+        if (challengeTimedOut && activeChallenge) {
+          challenges = state.challenges.map((c) =>
+            c.id === activeChallenge.id
+              ? { ...c, active: false, attemptingLevel: 0, currentWins: 0, currentLosses: 0, startedAt: undefined }
+              : c
+          );
+        }
+
         return {
           ...state,
           training: {
-            minutes: state.training.minutes + trainingGained,
+            minutes: Math.max(0, state.training.minutes + trainingGained - trainingDecay),
           },
           resources: {
             ...state.resources,
@@ -431,6 +499,7 @@ function createGameStore() {
             timePlayed: state.stats.timePlayed + deltaSeconds,
             totalMoneyEarned: state.stats.totalMoneyEarned + incomeGained,
           },
+          challenges,
           lastTick: Date.now(),
         };
       });
@@ -495,6 +564,11 @@ function createGameStore() {
       let success = false;
 
       update((state) => {
+        // Block upgrades during 'no_upgrades' challenge
+        const activeChallenge = getActiveChallenge(state);
+        const restriction = activeChallenge ? getActiveChallengeRestriction(activeChallenge) : null;
+        if (restriction?.type === 'noUpgrades') return state;
+
         const upgradeIndex = state.upgrades.findIndex((u) => u.id === upgradeId);
         if (upgradeIndex === -1) return state;
 
@@ -503,7 +577,8 @@ function createGameStore() {
 
         const cost = calculateUpgradeCost(upgrade);
 
-        if (state.training.minutes < cost) return state;
+        // Upgrades cost Money (not Training)
+        if (state.resources.money < cost) return state;
 
         success = true;
         const newUpgrades = [...state.upgrades];
@@ -511,8 +586,9 @@ function createGameStore() {
 
         return {
           ...state,
-          training: {
-            minutes: state.training.minutes - cost,
+          resources: {
+            ...state.resources,
+            money: state.resources.money - cost,
           },
           upgrades: newUpgrades,
         };
@@ -523,11 +599,14 @@ function createGameStore() {
     },
 
     /**
-     * Play a match
+     * Play a match (costs training minutes)
      */
     playMatch(): MatchResult | null {
       const state = get({ subscribe });
       if (!canPlayMatch(state)) return null;
+
+      // Get match cost for deduction
+      const matchCost = getMatchCost(state);
 
       const activeChallenge = getActiveChallenge(state);
 
@@ -539,16 +618,20 @@ function createGameStore() {
       const moraleBonus = Math.floor(state.morale.level / 20) * 0.01;
       let winChance = Math.min(0.9, 0.4 + trainingBonus + winChanceFromUpgrades + moraleBonus);
 
-      // Apply challenge restrictions to win chance
-      if (activeChallenge?.id === 'rookie_mode') {
-        winChance = Math.min(0.5, winChance); // Cap at 50%
+      // Get challenge restriction if active
+      const challengeRestriction = activeChallenge ? getActiveChallengeRestriction(activeChallenge) : null;
+
+      // Apply challenge restrictions to win chance (winChanceCap)
+      if (challengeRestriction?.type === 'winChanceCap') {
+        const cap = challengeRestriction.value as number || 0.4;
+        winChance = Math.min(cap, winChance);
       }
 
       // Simulate match with potentially modified win chance
       let result = simulateMatch(state);
 
       // Re-simulate if challenge caps win chance (override the result based on capped chance)
-      if (activeChallenge?.id === 'rookie_mode') {
+      if (challengeRestriction?.type === 'winChanceCap') {
         const roll = Math.random();
         const won = roll < winChance;
         result = {
@@ -559,11 +642,14 @@ function createGameStore() {
         };
       }
 
-      // Apply challenge restrictions to rewards
+      // Apply challenge restrictions to rewards (noMoney)
       let moneyEarned = result.moneyEarned;
-      if (activeChallenge?.id === 'budget_season') {
-        moneyEarned = 0; // No money during budget season
+      if (challengeRestriction?.type === 'noMoney') {
+        moneyEarned = 0; // No money during budget season challenge
       }
+
+      // Track if a challenge was completed flawlessly (for achievement)
+      let challengeCompletedFlawlessly = false;
 
       update((s) => {
         let newChallenges = s.challenges;
@@ -573,47 +659,47 @@ function createGameStore() {
           newChallenges = s.challenges.map((c) => {
             if (!c.active) return c;
 
-            let newProgress = c.progress;
-            let completed = false;
+            if (result.won) {
+              const newWins = c.currentWins + 1;
+              const goalWins = getChallengeGoalWins(c, c.attemptingLevel);
+              const levelCompleted = newWins >= goalWins;
 
-            switch (c.completionType) {
-              case 'winMatches':
-                if (result.won) {
-                  newProgress = c.progress + 1;
-                  completed = newProgress >= c.completionValue;
-                }
-                break;
-              case 'consecutiveWins':
-                if (result.won) {
-                  newProgress = c.progress + 1;
-                  completed = newProgress >= c.completionValue;
-                } else {
-                  newProgress = 0; // Reset on loss
-                }
-                break;
-              case 'winWithoutUpgrades':
-                // This is tracked separately - just count wins
-                if (result.won) {
-                  newProgress = c.progress + 1;
-                  completed = newProgress >= c.completionValue;
-                }
-                break;
-            }
+              if (levelCompleted) {
+                // Check if completed without losses (flawless run)
+                challengeCompletedFlawlessly = c.currentLosses === 0;
 
-            if (completed) {
-              return { ...c, progress: newProgress, active: false, completed: true };
+                // Level completed - increment currentLevel and deactivate
+                return {
+                  ...c,
+                  currentWins: 0,
+                  currentLosses: 0,
+                  active: false,
+                  currentLevel: c.attemptingLevel,
+                  attemptingLevel: 0,
+                  startedAt: undefined,
+                };
+              }
+              return { ...c, currentWins: newWins };
+            } else {
+              // Track loss during challenge
+              return { ...c, currentLosses: c.currentLosses + 1 };
             }
-            return { ...c, progress: newProgress };
           });
         }
 
-        // Update season wins/losses
-        const newSeasonWins = s.season.wins + (result.won ? 1 : 0);
-        const newSeasonLosses = s.season.losses + (result.won ? 0 : 1);
-        const seasonCompleted = newSeasonWins >= s.season.goalWins;
+        // Update season wins/losses (only if not in a challenge)
+        // When in a challenge, the challenge IS the season
+        const inChallenge = !!activeChallenge;
+        const newSeasonWins = inChallenge ? s.season.wins : s.season.wins + (result.won ? 1 : 0);
+        const newSeasonLosses = inChallenge ? s.season.losses : s.season.losses + (result.won ? 0 : 1);
+        const seasonCompleted = !inChallenge && newSeasonWins >= s.season.goalWins;
 
         return {
           ...s,
+          // Deduct training cost for match
+          training: {
+            minutes: s.training.minutes - matchCost,
+          },
           resources: {
             ...s.resources,
             fans: s.resources.fans + result.fansGained,
@@ -648,6 +734,7 @@ function createGameStore() {
       const newAchievements = checkAchievements(updatedState, {
         lastMatchResult: result,
         lastMatchWinChance: winChance,
+        challengeCompletedWithoutLoss: challengeCompletedFlawlessly,
       });
       unlockAchievements(newAchievements);
 
@@ -686,7 +773,9 @@ function createGameStore() {
     },
 
     /**
-     * Start a challenge
+     * Start a challenge (special season with restrictions)
+     * Starts the next uncompleted level of the challenge.
+     * Resets the current season and applies the challenge restrictions.
      */
     startChallenge(challengeId: string): boolean {
       const state = get({ subscribe });
@@ -695,13 +784,54 @@ function createGameStore() {
       if (getActiveChallenge(state)) return false;
 
       const challenge = state.challenges.find((c) => c.id === challengeId);
-      if (!challenge || challenge.completed || !challenge.unlocked) return false;
+      if (!challenge) return false;
+
+      // Check if there are more levels to complete
+      if (challenge.currentLevel >= challenge.maxLevel) return false;
+
+      // The next level to attempt
+      const nextLevel = challenge.currentLevel + 1;
+
+      // Get the restriction for this level
+      const restriction = getChallengeRestriction(challenge, nextLevel);
+
+      // Get starting resources from reputation upgrades
+      const startFans = Math.max(10, getStartingFans(state));
+      const startMoney = getStartingMoney(state);
+
+      // For forced tactic challenges, set the tactic
+      let forcedTactic = state.currentTactic;
+      if (restriction.type === 'forcedTactic') {
+        forcedTactic = restriction.value as 'offensive' | 'defensive' | 'balanced';
+      }
 
       update((s) => ({
         ...s,
+        // Reset resources (like starting a new season, but keep reputation)
+        resources: {
+          fans: startFans,
+          money: startMoney,
+          reputation: s.resources.reputation,
+        },
+        // Reset training
+        training: {
+          minutes: 0,
+        },
+        // Reset morale
+        morale: {
+          level: 0,
+          maxLevel: 100,
+        },
+        // Reset season upgrades
+        upgrades: [...INITIAL_UPGRADES],
+        // Apply forced tactic if any
+        currentTactic: forcedTactic,
+        // Reset match cooldown
+        lastMatchTime: 0,
+        // Mark challenge as active with the level being attempted
         challenges: s.challenges.map((c) =>
           c.id === challengeId
-            ? { ...c, active: true, progress: 0, startedAt: Date.now() }
+            ? { ...c, active: true, attemptingLevel: nextLevel, currentWins: 0, currentLosses: 0, startedAt: Date.now() }
             : c
         ),
       }));
@@ -712,6 +842,7 @@ function createGameStore() {
 
     /**
      * Abandon the active challenge
+     * Returns to a normal season state
      */
     abandonChallenge(): boolean {
       const state = get({ subscribe });
@@ -722,7 +853,7 @@ function createGameStore() {
         ...s,
         challenges: s.challenges.map((c) =>
           c.active
-            ? { ...c, active: false, progress: 0, startedAt: undefined }
+            ? { ...c, active: false, attemptingLevel: 0, currentWins: 0, currentLosses: 0, startedAt: undefined }
             : c
         ),
       }));
@@ -834,35 +965,30 @@ function createGameStore() {
 
     /**
      * Check and update challenge unlocks
+     * Note: All challenges are now unlocked from the start (AD-style)
+     * This function is kept for backwards compatibility but does nothing
      */
     updateChallengeUnlocks() {
-      update((state) => {
-        let hasChanges = false;
-        const newChallenges = state.challenges.map((challenge) => {
-          if (!challenge.unlocked && !challenge.completed && isChallengeUnlocked(challenge, state)) {
-            hasChanges = true;
-            return { ...challenge, unlocked: true };
-          }
-          return challenge;
-        });
-
-        if (!hasChanges) return state;
-
-        return {
-          ...state,
-          challenges: newChallenges,
-        };
-      });
+      // No-op - all challenges are available from start
     },
 
     /**
      * Set match tactic
      */
     setTactic(tactic: MatchTactic) {
-      update((state) => ({
-        ...state,
-        currentTactic: tactic,
-      }));
+      update((state) => {
+        // Block tactic changes during 'forcedTactic' challenges
+        const activeChallenge = getActiveChallenge(state);
+        if (activeChallenge) {
+          const restriction = getActiveChallengeRestriction(activeChallenge);
+          if (restriction.type === 'forcedTactic') return state;
+        }
+
+        return {
+          ...state,
+          currentTactic: tactic,
+        };
+      });
       this.save();
     },
 
@@ -894,11 +1020,40 @@ function createGameStore() {
 
     /**
      * Reset game (for testing)
+     * Preserves: reputation, reputation upgrades (purchased state), completed challenges (permanent progress)
      */
     reset() {
-      set({ ...INITIAL_GAME_STATE, upgrades: [...INITIAL_UPGRADES] });
+      const currentState = get({ subscribe });
+
+      // Preserve permanent progress
+      const preservedReputation = currentState.resources.reputation;
+
+      // Preserve purchased state but use current upgrade definitions
+      const preservedRepUpgrades = INITIAL_REPUTATION_UPGRADES.map((initialUpgrade) => {
+        const savedUpgrade = currentState.reputationUpgrades.find((u) => u.id === initialUpgrade.id);
+        if (savedUpgrade) {
+          return { ...initialUpgrade, purchased: savedUpgrade.purchased };
+        }
+        return initialUpgrade;
+      });
+
+      const preservedChallenges = currentState.challenges;
+
+      set({
+        ...INITIAL_GAME_STATE,
+        upgrades: [...INITIAL_UPGRADES],
+        resources: {
+          ...INITIAL_GAME_STATE.resources,
+          reputation: preservedReputation,
+        },
+        reputationUpgrades: preservedRepUpgrades,
+        challenges: preservedChallenges,
+      });
+
+      // Save the new state (with preserved progress) to localStorage
+      const newState = get({ subscribe });
       if (typeof window !== 'undefined') {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
       }
     },
 
@@ -969,16 +1124,27 @@ export const lockedUpgrades = derived(upgradesWithStatus, ($upgrades) =>
 );
 
 /**
- * Match unlock threshold (training minutes required)
+ * Current match cost in training minutes
  */
-export const MATCH_UNLOCK_THRESHOLD = 100;
+export const matchCost = derived(gameState, ($state) => getMatchCost($state));
 
 /**
- * Whether matches are unlocked
+ * Whether player can afford to play a match
+ */
+export const canAffordMatch = derived(gameState, ($state) => canPlayMatch($state));
+
+/**
+ * Match unlock threshold - kept for backwards compatibility
+ * Now equals match cost (matches are "unlocked" when you can afford them)
+ */
+export const MATCH_UNLOCK_THRESHOLD = 3000;
+
+/**
+ * Whether matches are unlocked (can afford at least one match)
  */
 export const matchesUnlocked = derived(
   gameState,
-  ($state) => $state.training.minutes >= MATCH_UNLOCK_THRESHOLD
+  ($state) => canPlayMatch($state)
 );
 
 /**
@@ -995,22 +1161,34 @@ export const moraleMultiplier = derived(
 export const winChance = derived(gameState, ($state) => {
   let chance = calculateWinChance($state);
 
-  // Apply challenge restrictions
+  // Apply challenge restrictions (winChanceCap)
   const activeChall = $state.challenges.find((c) => c.active);
-  if (activeChall?.id === 'rookie_mode') {
-    chance = Math.min(0.5, chance); // Cap at 50%
+  if (activeChall) {
+    const restriction = getActiveChallengeRestriction(activeChall);
+    if (restriction.type === 'winChanceCap') {
+      const cap = restriction.value as number || 0.4;
+      chance = Math.min(cap, chance);
+    }
   }
 
   return chance;
 });
 
 /**
- * All challenges with their unlock status
+ * All challenges with their current level and status
+ * All challenges are available from start (AD-style)
  */
 export const challengesWithStatus = derived(gameState, ($state) =>
   $state.challenges.map((challenge) => ({
     ...challenge,
-    isUnlocked: isChallengeUnlocked(challenge, $state),
+    // All challenges are unlocked from start
+    isUnlocked: true,
+    // Has at least one level completed
+    hasProgress: challenge.currentLevel > 0,
+    // Is fully completed (all 5 levels)
+    isMaxed: challenge.currentLevel >= challenge.maxLevel,
+    // Can start next level
+    canStart: !challenge.active && challenge.currentLevel < challenge.maxLevel,
   }))
 );
 
@@ -1022,17 +1200,17 @@ export const activeChallenge = derived(gameState, ($state) =>
 );
 
 /**
- * Completed challenges
+ * Challenges with at least one level completed
  */
 export const completedChallenges = derived(gameState, ($state) =>
-  $state.challenges.filter((c) => c.completed)
+  $state.challenges.filter((c) => c.currentLevel > 0)
 );
 
 /**
- * Available (unlocked but not completed) challenges
+ * Challenges that can still be leveled up (not fully maxed)
  */
 export const availableChallenges = derived(challengesWithStatus, ($challenges) =>
-  $challenges.filter((c) => c.isUnlocked && !c.completed && !c.active)
+  $challenges.filter((c) => c.canStart)
 );
 
 /**

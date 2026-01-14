@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus } from '$lib/stores/game-state';
+  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus, matchCost as matchCostStore, canAffordMatch as canAffordMatchStore } from '$lib/stores/game-state';
   import { formatNumber, formatDuration, formatMoney } from '$lib/utils/format';
-  import { calculateUpgradeCost, getMatchCooldown, calculateMoraleCost, TACTIC_MODIFIERS, canAffordUpgrade } from '$lib/game/formulas';
-  import type { MatchTactic } from '$lib/game/types';
+  import { calculateUpgradeCost, calculateMoraleCost, TACTIC_MODIFIERS, canAffordUpgrade, getChallengeGoalWins, getChallengeRestriction, getTotalChallengeReward, getNextLevelReward } from '$lib/game/formulas';
+  import type { MatchTactic, ChallengeRestriction } from '$lib/game/types';
   import type { MatchResult, Achievement, Challenge } from '$lib/game/types';
   import DevTools from './DevTools.svelte';
 
@@ -76,39 +76,28 @@
     game.achievements.filter((a: Achievement) => a.unlocked).length
   );
 
-  // Challenge helpers
+  // Challenge helpers (all challenges available from start - AD style)
   const challenges = $derived($challengesWithStatus);
   const currentChallenge = $derived($activeChallengeStore);
-  const completed = $derived($completedChallenges);
+  const challengesWithProgress = $derived($completedChallenges);
+  // Challenges that can still level up (not at max level and not active)
   const availableChallenges = $derived(
-    challenges.filter((c) => c.isUnlocked && !c.completed && !c.active)
+    challenges.filter((c) => c.canStart)
   );
-  const lockedChallenges = $derived(
-    challenges.filter((c) => !c.isUnlocked && !c.completed)
+  // Total levels completed across all challenges
+  const totalLevelsCompleted = $derived(
+    challenges.reduce((sum, c) => sum + c.currentLevel, 0)
   );
+  const maxTotalLevels = $derived(challenges.length * 5);
 
   let lastMatchResult = $state<MatchResult | null>(null);
-  let matchCooldownMs = $state(0);
   let clickRipples = $state<Array<{ id: number; x: number; y: number }>>([]);
   let rippleId = 0;
   let showGoalCelebration = $state(false);
 
-  // Update match cooldown display
-  $effect(() => {
-    const interval = setInterval(() => {
-      matchCooldownMs = getMatchCooldown($gameState);
-    }, 100);
-
-    return () => clearInterval(interval);
-  });
-
-  const matchCooldownDisplay = $derived(
-    matchCooldownMs > 0 ? formatDuration(matchCooldownMs / 1000) : ''
-  );
-
-  const cooldownPercent = $derived(
-    matchCooldownMs > 0 ? (1 - matchCooldownMs / 30000) * 100 : 100
-  );
+  // Match cost (training minutes)
+  const currentMatchCost = $derived($matchCostStore);
+  const canAffordMatch = $derived($canAffordMatchStore);
 
   function handleTrainClick(e: MouseEvent) {
     gameState.clickTrain();
@@ -204,23 +193,60 @@
   }
 
   function getChallengeProgress(challenge: Challenge): number {
-    return (challenge.progress / challenge.completionValue) * 100;
+    const goalWins = getChallengeGoalWins(challenge, challenge.attemptingLevel || 1);
+    return (challenge.currentWins / goalWins) * 100;
   }
 
-  function getUnlockConditionText(challenge: Challenge): string {
-    const { type, value } = challenge.unlockCondition;
+  function getRestrictionText(restriction: ChallengeRestriction): string {
+    const { type, value } = restriction;
     switch (type) {
-      case 'matchesPlayed':
-        return `Play ${value} matches`;
-      case 'fans':
-        return `Reach ${formatNumber(value)} fans`;
-      case 'money':
-        return `Earn ${formatMoney(value)}`;
-      case 'matchesWon':
-        return `Win ${value} matches`;
+      case 'winChanceCap':
+        return `Win chance capped at ${Math.round((value as number) * 100)}%`;
+      case 'noMoney':
+        return value && (value as number) > 0
+          ? `No money + ${Math.round((value as number) * 100)}% slower training`
+          : 'No money income (matches or passive)';
+      case 'trainingDecay':
+        return `Training decays ${Math.round((value as number) * 100)}% per second`;
+      case 'forcedTactic':
+        return `Locked to ${value} tactic`;
+      case 'noUpgrades':
+        return value && (value as number) > 1
+          ? `No upgrades + ${value}x match cost`
+          : 'Cannot buy season upgrades';
+      case 'timeLimit':
+        return `Complete within ${Math.round(value as number)} seconds`;
+      case 'highGoal':
+        return `Requires ${value} wins`;
       default:
         return '';
     }
+  }
+
+  // Generate star display for challenge levels (★★★☆☆)
+  function getLevelStars(challenge: Challenge): string {
+    const filled = '★'.repeat(challenge.currentLevel);
+    const empty = '☆'.repeat(challenge.maxLevel - challenge.currentLevel);
+    return filled + empty;
+  }
+
+  // Get the restriction for the next level to attempt
+  function getNextLevelRestriction(challenge: Challenge): ChallengeRestriction {
+    const nextLevel = challenge.currentLevel + 1;
+    // Return base restriction for maxed challenges (won't be displayed anyway)
+    if (nextLevel > challenge.maxLevel) {
+      return challenge.baseRestriction;
+    }
+    return getChallengeRestriction(challenge, nextLevel);
+  }
+
+  // Format reward description with level multiplier
+  function getRewardDescription(challenge: Challenge, level: number): string {
+    const baseValue = challenge.baseReward.value;
+    const scaling = challenge.rewardScaling[level - 1] || 1;
+    const scaledValue = baseValue * scaling;
+    const percentValue = Math.round(scaledValue * 100);
+    return `+${percentValue}% ${challenge.baseReward.type.replace(/([A-Z])/g, ' $1').toLowerCase().trim()}`;
   }
 
   const moraleCost = $derived(calculateMoraleCost(game.morale.level));
@@ -346,8 +372,8 @@
           {/if}
           {#if tab.id === 'challenges' && currentChallenge}
             <span class="tab-badge active-badge">!</span>
-          {:else if tab.id === 'challenges' && completed.length > 0}
-            <span class="tab-badge">{completed.length}</span>
+          {:else if tab.id === 'challenges' && totalLevelsCompleted > 0}
+            <span class="tab-badge">{totalLevelsCompleted}</span>
           {/if}
         </button>
       {/each}
@@ -497,8 +523,9 @@
           <button
             class="match-btn"
             class:locked={!matchUnlocked}
+            class:cant-afford={matchUnlocked && !canAffordMatch}
             onclick={handlePlayMatch}
-            disabled={matchCooldownMs > 0 || !matchUnlocked}
+            disabled={!canAffordMatch || !matchUnlocked}
           >
             {#if !matchUnlocked}
               <div class="match-locked">
@@ -508,26 +535,13 @@
                 <span class="lock-text">Locked</span>
                 <span class="lock-requirement">Train {formatNumber(MATCH_UNLOCK_THRESHOLD - minutes)} more minutes</span>
               </div>
-            {:else if matchCooldownMs > 0}
-              <div class="cooldown-ring">
-                <svg viewBox="0 0 100 100">
-                  <circle class="cooldown-bg" cx="50" cy="50" r="45" />
-                  <circle
-                    class="cooldown-progress"
-                    cx="50"
-                    cy="50"
-                    r="45"
-                    style="stroke-dashoffset: {283 * (1 - cooldownPercent / 100)}"
-                  />
-                </svg>
-                <span class="cooldown-time">{matchCooldownDisplay}</span>
-              </div>
             {:else}
               <div class="match-ready">
                 <svg class="whistle-icon" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                 </svg>
                 <span>Play Match</span>
+                <span class="match-cost" class:affordable={canAffordMatch}>Cost: {formatNumber(currentMatchCost)} training</span>
               </div>
             {/if}
           </button>
@@ -571,7 +585,7 @@
       <section class="panel upgrades-panel full-width">
         <div class="panel-header">
           <h2>Upgrades</h2>
-          <span class="panel-hint">Spend training minutes to improve your club</span>
+          <span class="panel-hint">Spend money to improve your club</span>
         </div>
 
         <div class="upgrades-grid">
@@ -612,8 +626,7 @@
                 {#if maxed}
                   <span class="maxed-label">MAX</span>
                 {:else}
-                  <span class="cost-value">{formatNumber(cost)}</span>
-                  <span class="cost-unit">min</span>
+                  <span class="cost-value">{formatMoney(cost)}</span>
                 {/if}
               </div>
             </button>
@@ -762,7 +775,7 @@
       <section class="challenges-tab">
         <div class="challenges-header">
           <h2>Challenges</h2>
-          <span class="challenges-count">{completed.length} / {challenges.length} Completed</span>
+          <span class="challenges-count">{totalLevelsCompleted} / {maxTotalLevels} Levels</span>
         </div>
 
         <!-- Active Challenge -->
@@ -772,7 +785,7 @@
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
               </svg>
-              Active Challenge
+              Active Challenge - Level {currentChallenge.attemptingLevel}
             </h3>
 
             <div class="challenge-card active">
@@ -784,14 +797,15 @@
               <div class="challenge-content">
                 <div class="challenge-header-row">
                   <span class="challenge-name">{currentChallenge.name}</span>
-                  <span class="challenge-progress-text">{currentChallenge.progress}/{currentChallenge.completionValue}</span>
+                  <span class="challenge-progress-text">{currentChallenge.currentWins}/{getChallengeGoalWins(currentChallenge, currentChallenge.attemptingLevel)} wins</span>
                 </div>
+                <span class="challenge-stars">{getLevelStars(currentChallenge)}</span>
                 <p class="challenge-desc">{currentChallenge.description}</p>
                 <p class="challenge-restriction">
                   <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
                   </svg>
-                  {currentChallenge.restriction}
+                  {getRestrictionText(getChallengeRestriction(currentChallenge, currentChallenge.attemptingLevel))}
                 </p>
                 <div class="challenge-progress-bar">
                   <div class="challenge-progress-fill" style="width: {getChallengeProgress(currentChallenge)}%"></div>
@@ -801,7 +815,7 @@
                     <svg viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                     </svg>
-                    {currentChallenge.rewardDescription}
+                    {getRewardDescription(currentChallenge, currentChallenge.attemptingLevel)}
                   </span>
                   <button class="abandon-btn" onclick={handleAbandonChallenge}>
                     Abandon
@@ -812,119 +826,80 @@
           </div>
         {/if}
 
-        <!-- Available Challenges -->
-        {#if availableChallenges.length > 0}
-          <div class="challenge-section">
-            <h3 class="challenge-section-title">
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
-              </svg>
-              Available Challenges
-            </h3>
-            <p class="challenge-section-hint">Complete challenges to earn permanent bonuses</p>
+        <!-- All Challenges (AD-style: all available from start) -->
+        <div class="challenge-section">
+          <h3 class="challenge-section-title">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+            </svg>
+            All Challenges
+          </h3>
+          <p class="challenge-section-hint">Complete levels 1-5 for stacking rewards. Harder levels = bigger bonuses!</p>
 
-            <div class="challenges-grid">
-              {#each availableChallenges as challenge}
-                <div class="challenge-card available">
-                  <div class="challenge-icon">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
+          <div class="challenges-grid">
+            {#each challenges as challenge}
+              <div class="challenge-card" class:maxed={challenge.isMaxed} class:has-progress={challenge.hasProgress}>
+                <div class="challenge-icon" class:completed={challenge.isMaxed}>
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    {#if challenge.isMaxed}
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    {:else}
                       <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-                    </svg>
-                  </div>
-                  <div class="challenge-content">
+                    {/if}
+                  </svg>
+                </div>
+                <div class="challenge-content">
+                  <div class="challenge-header-row">
                     <span class="challenge-name">{challenge.name}</span>
-                    <p class="challenge-desc">{challenge.description}</p>
+                    <span class="challenge-stars" class:maxed={challenge.isMaxed}>{getLevelStars(challenge)}</span>
+                  </div>
+                  <p class="challenge-desc">{challenge.description}</p>
+
+                  {#if challenge.isMaxed}
+                    <!-- Maxed out - show total reward -->
+                    <p class="challenge-total-reward">
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>
+                      Total: +{Math.round(getTotalChallengeReward(challenge) * 100)}% {challenge.baseReward.type}
+                    </p>
+                  {:else}
+                    <!-- Show next level info -->
                     <p class="challenge-restriction">
                       <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
                       </svg>
-                      {challenge.restriction}
+                      L{challenge.currentLevel + 1}: {getRestrictionText(getNextLevelRestriction(challenge))}
                     </p>
-                    <p class="challenge-goal">Goal: {challenge.goal}</p>
+                    <p class="challenge-goal">Goal: Win {getChallengeGoalWins(challenge, challenge.currentLevel + 1)} matches</p>
                     <div class="challenge-footer">
                       <span class="challenge-reward">
                         <svg viewBox="0 0 24 24" fill="currentColor">
                           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                         </svg>
-                        {challenge.rewardDescription}
+                        {getRewardDescription(challenge, challenge.currentLevel + 1)}
                       </span>
                       <button
                         class="start-btn"
                         onclick={() => handleStartChallenge(challenge.id)}
                         disabled={!!currentChallenge}
                       >
-                        {currentChallenge ? 'Challenge Active' : 'Start'}
+                        {currentChallenge ? 'Active' : `Level ${challenge.currentLevel + 1}`}
                       </button>
                     </div>
-                  </div>
+                  {/if}
+
+                  {#if challenge.currentLevel > 0 && !challenge.isMaxed}
+                    <p class="challenge-current-bonus">
+                      Current bonus: +{Math.round(getTotalChallengeReward(challenge) * 100)}%
+                    </p>
+                  {/if}
                 </div>
-              {/each}
-            </div>
+              </div>
+            {/each}
           </div>
-        {/if}
+        </div>
 
-        <!-- Completed Challenges -->
-        {#if completed.length > 0}
-          <div class="challenge-section">
-            <h3 class="challenge-section-title completed-title">
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-              </svg>
-              Completed
-            </h3>
-
-            <div class="challenges-grid">
-              {#each completed as challenge}
-                <div class="challenge-card completed">
-                  <div class="challenge-icon completed">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                    </svg>
-                  </div>
-                  <div class="challenge-content">
-                    <span class="challenge-name">{challenge.name}</span>
-                    <p class="challenge-desc">{challenge.description}</p>
-                    <span class="challenge-reward active">
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                      </svg>
-                      {challenge.rewardDescription}
-                    </span>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          </div>
-        {/if}
-
-        <!-- Locked Challenges -->
-        {#if lockedChallenges.length > 0}
-          <div class="challenge-section">
-            <h3 class="challenge-section-title locked-title">
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/>
-              </svg>
-              Locked
-            </h3>
-
-            <div class="challenges-grid">
-              {#each lockedChallenges as challenge}
-                <div class="challenge-card locked">
-                  <div class="challenge-icon locked">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/>
-                    </svg>
-                  </div>
-                  <div class="challenge-content">
-                    <span class="challenge-name">{challenge.name}</span>
-                    <p class="challenge-desc">{challenge.description}</p>
-                    <p class="unlock-requirement">{getUnlockConditionText(challenge)}</p>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          </div>
-        {/if}
       </section>
     {/if}
 
@@ -2264,41 +2239,20 @@
     text-align: center;
   }
 
-  .cooldown-ring {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .match-cost {
+    font-size: 0.75rem;
+    color: var(--score-red);
+    font-family: var(--font-body);
+    letter-spacing: 0;
+    opacity: 0.8;
   }
 
-  .cooldown-ring svg {
-    position: absolute;
-    inset: 10px;
-    transform: rotate(-90deg);
+  .match-cost.affordable {
+    color: var(--score-green);
   }
 
-  .cooldown-bg {
-    fill: none;
-    stroke: var(--arena-dark);
-    stroke-width: 6;
-  }
-
-  .cooldown-progress {
-    fill: none;
-    stroke: var(--ice-blue);
-    stroke-width: 6;
-    stroke-linecap: round;
-    stroke-dasharray: 283;
-    transition: stroke-dashoffset 0.1s linear;
-  }
-
-  .cooldown-time {
-    font-family: var(--font-score);
-    font-size: 1.2rem;
-    color: var(--ice-white);
-    text-shadow: 0 0 10px var(--ice-glow);
+  .match-btn.cant-afford {
+    opacity: 0.6;
   }
 
   .match-ready {
@@ -2927,8 +2881,52 @@
     opacity: 0.8;
   }
 
+  .challenge-card.maxed {
+    border-color: var(--gold);
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.1) 0%, var(--arena-dark) 100%);
+  }
+
+  .challenge-card.has-progress {
+    border-color: var(--ice-blue);
+  }
+
   .challenge-card.locked {
     opacity: 0.5;
+  }
+
+  .challenge-stars {
+    font-size: 1rem;
+    letter-spacing: 2px;
+    color: var(--gold);
+    text-shadow: 0 0 4px rgba(234, 179, 8, 0.3);
+  }
+
+  .challenge-stars.maxed {
+    color: var(--gold);
+    text-shadow: 0 0 8px rgba(234, 179, 8, 0.6);
+  }
+
+  .challenge-total-reward {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--gold);
+    font-weight: 600;
+    margin-top: 0.5rem;
+  }
+
+  .challenge-total-reward svg {
+    width: 16px;
+    height: 16px;
+    color: var(--gold);
+  }
+
+  .challenge-current-bonus {
+    font-size: 0.75rem;
+    color: var(--ice-blue);
+    opacity: 0.8;
+    margin-top: 0.25rem;
   }
 
   .challenge-icon {
