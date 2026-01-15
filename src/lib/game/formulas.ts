@@ -35,7 +35,7 @@ export const MORALE_EFFECT_PER_LEVEL = 0.05;
  */
 export const BOOST_DURATION_MS = 5000;  // 5 seconds per click
 export const BOOST_MAX_DURATION_MS = 15000;  // Max 15 seconds stacked
-export const BOOST_MULTIPLIER = 3;  // 3x training rate during boost
+export const BOOST_MULTIPLIER = 5;  // 5x training rate during boost
 
 /**
  * Tactic modifiers for matches
