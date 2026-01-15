@@ -907,10 +907,10 @@
                 <circle cx="120" cy="64.5" r="1" fill="#c41e3a" />
 
                 <!-- Left goal crease (6ft radius semicircle, facing center) -->
-                <path d="M 11 36.5 A 6 6 0 0 1 17 42.5 A 6 6 0 0 1 11 48.5" fill="rgba(135, 206, 250, 0.5)" stroke="#c41e3a" stroke-width="0.4" />
+                <path d="M 11 36.5 A 6 6 0 0 1 17 42.5 A 6 6 0 0 1 11 48.5" fill="none" stroke="#c41e3a" stroke-width="0.5" />
 
                 <!-- Right goal crease (6ft radius semicircle, facing center) -->
-                <path d="M 189 48.5 A 6 6 0 0 1 183 42.5 A 6 6 0 0 1 189 36.5" fill="rgba(135, 206, 250, 0.5)" stroke="#c41e3a" stroke-width="0.4" />
+                <path d="M 189 48.5 A 6 6 0 0 1 183 42.5 A 6 6 0 0 1 189 36.5" fill="none" stroke="#c41e3a" stroke-width="0.5" />
 
                 <!-- Left goal (4ft deep x 6ft wide, opening faces center at goal line x=11) -->
                 <rect x="7" y="39.5" width="4" height="6" fill="#fff" stroke="#c41e3a" stroke-width="0.4" />
@@ -2492,6 +2492,8 @@
     width: 100%;
     height: 100%;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    border-radius: 12px; /* Match container border radius */
+    overflow: hidden;
   }
 
   .unified-rink-container.match-mode .rink-svg rect:first-of-type {
