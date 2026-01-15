@@ -320,40 +320,58 @@
   }
 
   // Player positions for animation (relative %)
+  // Players have multiple keyframe positions to create skating effect
   interface RinkPlayer {
     id: number;
-    x: number;
-    y: number;
     team: 'home' | 'away';
     isGoalie?: boolean;
+    // Animation path: array of [x, y] positions (% of rink)
+    path: [number, number][];
+    animationDuration: number; // seconds
     animationDelay: number;
   }
 
+  // Training: 4 players skating wide across the rink
   const trainingPlayers: RinkPlayer[] = [
-    { id: 1, x: 30, y: 30, team: 'home', animationDelay: 0 },
-    { id: 2, x: 50, y: 50, team: 'home', animationDelay: 0.2 },
-    { id: 3, x: 70, y: 40, team: 'home', animationDelay: 0.4 },
-    { id: 4, x: 40, y: 65, team: 'home', animationDelay: 0.6 },
+    { id: 1, team: 'home', path: [[20, 25], [45, 35], [70, 30], [55, 50], [30, 45], [20, 25]], animationDuration: 6, animationDelay: 0 },
+    { id: 2, team: 'home', path: [[75, 70], [50, 60], [30, 65], [45, 75], [65, 70], [75, 70]], animationDuration: 7, animationDelay: 1 },
+    { id: 3, team: 'home', path: [[60, 25], [80, 40], [70, 60], [45, 55], [55, 35], [60, 25]], animationDuration: 6.5, animationDelay: 0.5 },
+    { id: 4, team: 'home', path: [[25, 60], [40, 45], [60, 50], [50, 70], [30, 75], [25, 60]], animationDuration: 7.5, animationDelay: 1.5 },
   ];
 
+  // Match: 5v5 + goalies skating with wider movements
   const matchPlayers: RinkPlayer[] = [
-    // Home team (5 + goalie)
-    { id: 1, x: 15, y: 50, team: 'home', isGoalie: true, animationDelay: 0 },
-    { id: 2, x: 25, y: 30, team: 'home', animationDelay: 0.1 },
-    { id: 3, x: 25, y: 70, team: 'home', animationDelay: 0.15 },
-    { id: 4, x: 35, y: 45, team: 'home', animationDelay: 0.2 },
-    { id: 5, x: 35, y: 55, team: 'home', animationDelay: 0.25 },
-    { id: 6, x: 45, y: 50, team: 'home', animationDelay: 0.3 },
-    // Away team (5 + goalie)
-    { id: 7, x: 85, y: 50, team: 'away', isGoalie: true, animationDelay: 0.05 },
-    { id: 8, x: 75, y: 30, team: 'away', animationDelay: 0.12 },
-    { id: 9, x: 75, y: 70, team: 'away', animationDelay: 0.18 },
-    { id: 10, x: 65, y: 45, team: 'away', animationDelay: 0.22 },
-    { id: 11, x: 65, y: 55, team: 'away', animationDelay: 0.28 },
-    { id: 12, x: 55, y: 50, team: 'away', animationDelay: 0.32 },
+    // Home team goalie - moves side to side in crease
+    { id: 1, team: 'home', isGoalie: true, path: [[15, 40], [15, 60], [17, 50], [15, 45], [15, 55]], animationDuration: 3, animationDelay: 0 },
+    // Home forwards - wide skating patterns
+    { id: 2, team: 'home', path: [[30, 25], [50, 30], [65, 35], [55, 50], [40, 40], [30, 25]], animationDuration: 4, animationDelay: 0.1 },
+    { id: 3, team: 'home', path: [[30, 75], [50, 70], [65, 65], [55, 50], [40, 60], [30, 75]], animationDuration: 4.2, animationDelay: 0.3 },
+    { id: 4, team: 'home', path: [[40, 50], [55, 40], [70, 50], [55, 60], [40, 50]], animationDuration: 3.5, animationDelay: 0.2 },
+    // Home defense - patrol blue line area
+    { id: 5, team: 'home', path: [[22, 30], [28, 45], [22, 55], [18, 40], [22, 30]], animationDuration: 4.5, animationDelay: 0.4 },
+    { id: 6, team: 'home', path: [[22, 70], [28, 55], [22, 45], [18, 60], [22, 70]], animationDuration: 4.8, animationDelay: 0.5 },
+    // Away team goalie
+    { id: 7, team: 'away', isGoalie: true, path: [[85, 60], [85, 40], [83, 50], [85, 55], [85, 45]], animationDuration: 3, animationDelay: 0.1 },
+    // Away forwards - wide skating patterns
+    { id: 8, team: 'away', path: [[70, 25], [50, 30], [35, 35], [45, 50], [60, 40], [70, 25]], animationDuration: 4, animationDelay: 0.2 },
+    { id: 9, team: 'away', path: [[70, 75], [50, 70], [35, 65], [45, 50], [60, 60], [70, 75]], animationDuration: 4.2, animationDelay: 0.4 },
+    { id: 10, team: 'away', path: [[60, 50], [45, 40], [30, 50], [45, 60], [60, 50]], animationDuration: 3.5, animationDelay: 0.3 },
+    // Away defense - patrol blue line area
+    { id: 11, team: 'away', path: [[78, 30], [72, 45], [78, 55], [82, 40], [78, 30]], animationDuration: 4.5, animationDelay: 0.5 },
+    { id: 12, team: 'away', path: [[78, 70], [72, 55], [78, 45], [82, 60], [78, 70]], animationDuration: 4.8, animationDelay: 0.6 },
   ];
 
   const rinkPlayers = $derived(rinkMode === 'match' ? matchPlayers : trainingPlayers);
+
+  // Puck center position (animation handles the passing movement)
+  const puckPath = $derived(rinkMode === 'match' ? [[50, 50]] : [[45, 50]]);
+
+  // Training click handler for Train button
+  function handleTrainButtonClick() {
+    if (rinkMode === 'training' && !isPlayingMatch) {
+      gameState.clickTrain();
+    }
+  }
 
   function handleRinkClick(e: MouseEvent) {
     if (rinkMode === 'training' && !isPlayingMatch) {
@@ -373,8 +391,9 @@
     // Switch to match mode
     rinkMode = 'match';
     isPlayingMatch = true;
+    lastMatchResult = null; // Clear previous result
 
-    // Play match after animation delay
+    // Play match after animation delay (5 seconds of gameplay)
     matchAnimationTimer = setTimeout(() => {
       const result = gameState.playMatch();
       if (result) {
@@ -387,12 +406,12 @@
         }
       }
 
-      // Return to training mode after showing result
+      // Return to training mode after showing result (2.5s to read result)
       setTimeout(() => {
         rinkMode = 'training';
         isPlayingMatch = false;
-      }, 2000);
-    }, 2500);
+      }, 2500);
+    }, 5000); // 5 seconds of match animation
   }
 
   // Cleanup timer on component destroy
@@ -629,7 +648,7 @@
           <button
             class="action-btn training-btn"
             class:active={rinkMode === 'training' && !isPlayingMatch}
-            onclick={() => { rinkMode = 'training'; }}
+            onclick={handleTrainButtonClick}
             disabled={isPlayingMatch}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
@@ -704,114 +723,140 @@
           </div>
         {/if}
 
-        <!-- Unified Rink -->
-        <button
-          class="unified-rink-button"
-          class:match-mode={rinkMode === 'match'}
-          onclick={handleRinkClick}
-          disabled={rinkMode === 'match'}
+        <!-- Unified Rink with NES-style scoreboard -->
+        <div
+          class="rink-container"
           style="--team-primary: {game.club?.colors?.primary || '#dc2626'}; --team-secondary: {game.club?.colors?.secondary || '#ffffff'}; --opponent-primary: {opponentColors.primary}; --opponent-secondary: {opponentColors.secondary};"
         >
-          <div class="unified-rink">
-            <!-- Ice surface -->
-            <div class="ice-surface">
-              <div class="ice-reflection"></div>
+          <!-- NES-style Scoreboard above rink -->
+          <div class="nes-scoreboard">
+            <div class="scoreboard-team home">
+              <svg class="scoreboard-jersey" viewBox="0 0 24 24" style="--primary: var(--team-primary); --secondary: var(--team-secondary);">
+                <path class="jersey-body" d="M6 4L4 6v14h16V6l-2-2h-3v2a3 3 0 01-6 0V4H6z" fill="var(--primary)"/>
+                <path class="jersey-collar" d="M9 4v2a3 3 0 006 0V4" fill="none" stroke="var(--secondary)" stroke-width="1.5"/>
+                <path class="jersey-sleeves" d="M4 6L2 8v4l2-1V6zM20 6l2 2v4l-2-1V6z" fill="var(--secondary)"/>
+              </svg>
+              <span class="team-name">{game.club?.name || 'HOME'}</span>
             </div>
-
-            <!-- Rink markings -->
-            <div class="center-ice">
-              <div class="center-circle"></div>
-              <div class="center-dot"></div>
+            <div class="scoreboard-score">
+              {#if lastMatchResult && rinkMode === 'match'}
+                <span class="score home">{lastMatchResult.goalsFor}</span>
+                <span class="score-separator">-</span>
+                <span class="score away">{lastMatchResult.goalsAgainst}</span>
+              {:else}
+                <span class="score home">0</span>
+                <span class="score-separator">-</span>
+                <span class="score away">0</span>
+              {/if}
             </div>
-            <div class="center-line"></div>
-            <div class="blue-line left"></div>
-            <div class="blue-line right"></div>
-            <div class="goal-crease left"></div>
-            <div class="goal-crease right"></div>
-
-            <!-- Goal nets -->
-            <div class="goal-net left"></div>
-            <div class="goal-net right"></div>
-
-            <!-- Pixel Players -->
-            {#each rinkPlayers as player (player.id)}
-              <div
-                class="pixel-player"
-                class:home={player.team === 'home'}
-                class:away={player.team === 'away'}
-                class:goalie={player.isGoalie}
-                class:match-mode={rinkMode === 'match'}
-                style="left: {player.x}%; top: {player.y}%; animation-delay: {player.animationDelay}s;"
-              ></div>
-            {/each}
-
-            <!-- Referee (only during match) -->
-            {#if rinkMode === 'match'}
-              <div class="pixel-referee" style="left: 50%; top: 25%;"></div>
-              <div class="pixel-referee" style="left: 50%; top: 75%;"></div>
+            <div class="scoreboard-team away">
+              <span class="team-name">Opponent</span>
+              <svg class="scoreboard-jersey" viewBox="0 0 24 24" style="--primary: var(--opponent-primary); --secondary: var(--opponent-secondary);">
+                <path class="jersey-body" d="M6 4L4 6v14h16V6l-2-2h-3v2a3 3 0 01-6 0V4H6z" fill="var(--primary)"/>
+                <path class="jersey-collar" d="M9 4v2a3 3 0 006 0V4" fill="none" stroke="var(--secondary)" stroke-width="1.5"/>
+                <path class="jersey-sleeves" d="M4 6L2 8v4l2-1V6zM20 6l2 2v4l-2-1V6z" fill="var(--secondary)"/>
+              </svg>
+            </div>
+            {#if lastMatchResult && rinkMode === 'match'}
+              <div class="scoreboard-result" class:won={lastMatchResult.won}>
+                {lastMatchResult.won ? 'WIN!' : 'LOSS'}
+                <span class="result-rewards">+{lastMatchResult.fansGained} fans, +{formatMoney(lastMatchResult.moneyEarned)}</span>
+              </div>
             {/if}
+          </div>
 
-            <!-- Coach (only during training) -->
-            {#if rinkMode === 'training'}
-              <div class="pixel-coach" style="left: 8%; top: 50%;"></div>
-            {/if}
+          <div
+            class="unified-rink-container"
+            class:match-mode={rinkMode === 'match'}
+          >
+            <div class="unified-rink">
+              <!-- SVG Hockey Rink - NHL dimensions (200ft x 85ft) -->
+              <svg class="rink-svg" viewBox="0 0 200 85" preserveAspectRatio="xMidYMid meet">
+                <!-- Ice surface with rounded corners (smaller radius for better look) -->
+                <rect x="0" y="0" width="200" height="85" rx="12" ry="12" fill="#e8f4fc" />
 
-            <!-- Puck -->
-            <div class="pixel-puck" class:match-mode={rinkMode === 'match'}></div>
+                <!-- Boards (red outline) -->
+                <rect x="0.5" y="0.5" width="199" height="84" rx="12" ry="12" fill="none" stroke="#c41e3a" stroke-width="1" />
 
-            <!-- Click ripples (training only) -->
-            {#if rinkMode === 'training'}
-              {#each clickRipples as ripple (ripple.id)}
+                <!-- Goal lines (red, at 11ft from each end - extend to boards) -->
+                <line x1="11" y1="0" x2="11" y2="85" stroke="#c41e3a" stroke-width="0.5" />
+                <line x1="189" y1="0" x2="189" y2="85" stroke="#c41e3a" stroke-width="0.5" />
+
+                <!-- Blue lines (25ft from center = x=75 and x=125) -->
+                <line x1="75" y1="0" x2="75" y2="85" stroke="#2563eb" stroke-width="1" />
+                <line x1="125" y1="0" x2="125" y2="85" stroke="#2563eb" stroke-width="1" />
+
+                <!-- Center red line -->
+                <line x1="100" y1="0" x2="100" y2="85" stroke="#c41e3a" stroke-width="1" />
+
+                <!-- Center ice faceoff circle (15ft radius) -->
+                <circle cx="100" cy="42.5" r="15" fill="none" stroke="#2563eb" stroke-width="0.5" />
+                <circle cx="100" cy="42.5" r="1" fill="#2563eb" />
+
+                <!-- Left zone faceoff circles (20ft from goal line, 22ft from side) -->
+                <circle cx="31" cy="20.5" r="15" fill="none" stroke="#c41e3a" stroke-width="0.5" />
+                <circle cx="31" cy="20.5" r="1" fill="#c41e3a" />
+                <circle cx="31" cy="64.5" r="15" fill="none" stroke="#c41e3a" stroke-width="0.5" />
+                <circle cx="31" cy="64.5" r="1" fill="#c41e3a" />
+
+                <!-- Right zone faceoff circles -->
+                <circle cx="169" cy="20.5" r="15" fill="none" stroke="#c41e3a" stroke-width="0.5" />
+                <circle cx="169" cy="20.5" r="1" fill="#c41e3a" />
+                <circle cx="169" cy="64.5" r="15" fill="none" stroke="#c41e3a" stroke-width="0.5" />
+                <circle cx="169" cy="64.5" r="1" fill="#c41e3a" />
+
+                <!-- Neutral zone faceoff dots (5ft from blue lines) -->
+                <circle cx="80" cy="20.5" r="1" fill="#c41e3a" />
+                <circle cx="80" cy="64.5" r="1" fill="#c41e3a" />
+                <circle cx="120" cy="20.5" r="1" fill="#c41e3a" />
+                <circle cx="120" cy="64.5" r="1" fill="#c41e3a" />
+
+                <!-- Left goal crease (6ft radius semicircle, facing center) -->
+                <path d="M 11 36.5 A 6 6 0 0 1 17 42.5 A 6 6 0 0 1 11 48.5" fill="rgba(135, 206, 250, 0.5)" stroke="#c41e3a" stroke-width="0.4" />
+
+                <!-- Right goal crease (6ft radius semicircle, facing center) -->
+                <path d="M 189 48.5 A 6 6 0 0 1 183 42.5 A 6 6 0 0 1 189 36.5" fill="rgba(135, 206, 250, 0.5)" stroke="#c41e3a" stroke-width="0.4" />
+
+                <!-- Left goal (4ft deep x 6ft wide, opening faces center at goal line x=11) -->
+                <rect x="7" y="39.5" width="4" height="6" fill="#fff" stroke="#c41e3a" stroke-width="0.4" />
+                <!-- Goal net mesh (vertical lines) -->
+                <line x1="8" y1="40" x2="8" y2="45" stroke="#ccc" stroke-width="0.2" />
+                <line x1="9.5" y1="40" x2="9.5" y2="45" stroke="#ccc" stroke-width="0.2" />
+
+                <!-- Right goal (4ft deep x 6ft wide, opening faces center at goal line x=189) -->
+                <rect x="189" y="39.5" width="4" height="6" fill="#fff" stroke="#c41e3a" stroke-width="0.4" />
+                <!-- Goal net mesh (vertical lines) -->
+                <line x1="190.5" y1="40" x2="190.5" y2="45" stroke="#ccc" stroke-width="0.2" />
+                <line x1="192" y1="40" x2="192" y2="45" stroke="#ccc" stroke-width="0.2" />
+              </svg>
+
+              <!-- Pixel Players with skating animations -->
+              {#each rinkPlayers as player (player.id)}
                 <div
-                  class="click-ripple"
-                  style="left: {ripple.x}px; top: {ripple.y}px"
+                  class="pixel-player"
+                  class:home={player.team === 'home'}
+                  class:away={player.team === 'away'}
+                  class:goalie={player.isGoalie}
+                  class:match-mode={rinkMode === 'match'}
+                  style="left: {player.path[0][0]}%; top: {player.path[0][1]}%; --move-x: {(player.path[1]?.[0] || player.path[0][0]) - player.path[0][0]}%; --move-y: {(player.path[1]?.[1] || player.path[0][1]) - player.path[0][1]}%; --duration: {player.animationDuration}s; animation-delay: {player.animationDelay}s;"
                 ></div>
               {/each}
-            {/if}
 
-            <!-- Training click indicator -->
-            {#if rinkMode === 'training'}
-              <div class="click-indicator">
-                <span class="click-text">+{formatNumber(clickPwr)}</span>
-              </div>
-            {/if}
+              <!-- Referee (only during match) -->
+              {#if rinkMode === 'match'}
+                <div class="pixel-referee" style="left: 50%; top: 30%;"></div>
+              {/if}
 
-            <!-- Match animation overlay -->
-            {#if isPlayingMatch && !lastMatchResult}
-              <div class="match-animation-overlay">
-                <span class="match-text">Playing...</span>
-              </div>
-            {/if}
-          </div>
-        </button>
+              <!-- Coach (only during training) -->
+              {#if rinkMode === 'training' && !isPlayingMatch}
+                <div class="pixel-coach" style="left: 88%; top: 85%;"></div>
+              {/if}
 
-        <!-- Match Result (shown after match) -->
-        {#if lastMatchResult && rinkMode === 'match'}
-          <div class="rink-match-result" class:won={lastMatchResult.won}>
-            <div class="result-header">
-              <span class="result-label">{lastMatchResult.won ? 'Victory!' : 'Defeat'}</span>
-            </div>
-            <div class="result-score">
-              <span class="score-home">{lastMatchResult.goalsFor}</span>
-              <span class="score-divider">-</span>
-              <span class="score-away">{lastMatchResult.goalsAgainst}</span>
-            </div>
-            <div class="result-rewards">
-              <div class="reward">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3z"/>
-                </svg>
-                <span>+{lastMatchResult.fansGained}</span>
-              </div>
-              <div class="reward">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13z"/>
-                </svg>
-                <span>+{formatMoney(lastMatchResult.moneyEarned)}</span>
-              </div>
+              <!-- Puck with path animation -->
+              <div class="pixel-puck" class:match-mode={rinkMode === 'match'} style="left: {puckPath[0][0]}%; top: {puckPath[0][1]}%;"></div>
             </div>
           </div>
-        {/if}
+        </div>
       </section>
 
     {:else if activeTab === 'upgrades'}
@@ -2293,110 +2338,143 @@
     color: var(--score-green);
   }
 
-  /* Unified Rink Button */
-  .unified-rink-button {
+  /* NES-style Scoreboard */
+  .rink-container {
+    width: 100%;
+  }
+
+  .nes-scoreboard {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-lg);
+    padding: var(--space-sm) var(--space-lg);
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .scoreboard-team {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .scoreboard-jersey {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  }
+
+  .team-name {
+    font-family: var(--font-score);
+    font-size: 0.8rem;
+    color: var(--ice-white);
+    letter-spacing: 0.1em;
+  }
+
+  .scoreboard-score {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 0 var(--space-md);
+    background: #000;
+    border-radius: var(--radius-sm);
+  }
+
+  .scoreboard-score .score {
+    font-family: var(--font-score);
+    font-size: 1.5rem;
+    color: var(--score-gold);
+    min-width: 24px;
+    text-align: center;
+  }
+
+  .scoreboard-score .score-separator {
+    color: var(--ice-pale);
+    font-size: 1.2rem;
+  }
+
+  .scoreboard-result {
+    position: absolute;
+    right: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-family: var(--font-score);
+    font-size: 0.9rem;
+    color: var(--score-red);
+  }
+
+  .scoreboard-result.won {
+    color: var(--score-green);
+  }
+
+  .scoreboard-result .result-rewards {
+    font-size: 0.65rem;
+    color: var(--score-gold);
+  }
+
+  /* Unified Rink Container */
+  .unified-rink-container {
     display: block;
     width: 100%;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
+    max-width: 1200px;
+    margin: 0 auto;
   }
 
-  .unified-rink-button:disabled {
-    cursor: default;
-  }
-
+  /* NHL Rink: 200ft x 85ft = 2.35:1 ratio - FULL WIDTH */
   .unified-rink {
     width: 100%;
-    aspect-ratio: 2.2 / 1;
-    max-width: 600px;
+    aspect-ratio: 2.35 / 1;
+    max-width: 1400px; /* Very large max */
     margin: 0 auto;
-    background: linear-gradient(
-      180deg,
-      #e8f4fc 0%,
-      #d4e9f7 50%,
-      #c0ddf2 100%
-    );
-    border-radius: 100px;
-    border: 4px solid var(--team-primary, #dc2626);
     position: relative;
     overflow: hidden;
     transition: transform 0.1s, box-shadow 0.2s;
-    box-shadow:
-      inset 0 4px 20px rgba(0, 0, 0, 0.1),
-      0 8px 30px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
   }
 
-  .unified-rink-button:not(:disabled):hover .unified-rink {
-    transform: scale(1.01);
-    box-shadow:
-      inset 0 4px 20px rgba(0, 0, 0, 0.1),
-      0 10px 40px rgba(0, 0, 0, 0.3),
-      0 0 60px var(--ice-glow);
-  }
-
-  .unified-rink-button:not(:disabled):active .unified-rink {
-    transform: scale(0.99);
-  }
-
-  .unified-rink.match-mode {
-    border-color: var(--score-gold);
-    animation: match-pulse 1s ease-in-out infinite;
-  }
-
-  @keyframes match-pulse {
-    0%, 100% { box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.1), 0 0 30px rgba(251, 191, 36, 0.3); }
-    50% { box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.1), 0 0 50px rgba(251, 191, 36, 0.5); }
-  }
-
-  /* Goal nets */
-  .goal-net {
+  .rink-svg {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 8px;
-    height: 40px;
-    background: linear-gradient(90deg, #fff 0%, #ddd 100%);
-    border: 2px solid #999;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
   }
 
-  .goal-net.left {
-    left: 2px;
-    border-left: none;
-    border-radius: 0 4px 4px 0;
+  .unified-rink-container.match-mode .rink-svg rect:first-of-type {
+    fill: #d8ecff;
   }
 
-  .goal-net.right {
-    right: 2px;
-    border-right: none;
-    border-radius: 4px 0 0 4px;
-  }
-
-  /* Pixel Art Players - NES 8-bit style */
+  /* Pixel Art Players - NES 8-bit style, scaled for larger rink */
   .pixel-player {
     position: absolute;
-    width: 16px;
-    height: 22px;
+    width: 24px;
+    height: 32px;
     image-rendering: pixelated;
     transform: translate(-50%, -50%);
     z-index: 10;
-    /* CSS-generated pixel sprite */
+    /* CSS-generated pixel sprite - scaled 1.5x */
     background:
       /* Head (skin) */
-      linear-gradient(#f5d0c5, #f5d0c5) 4px 0 / 8px 5px,
+      linear-gradient(#f5d0c5, #f5d0c5) 6px 0 / 12px 7px,
       /* Jersey body */
-      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 2px 5px / 12px 8px,
+      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 3px 7px / 18px 12px,
       /* Jersey stripe */
-      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 2px 9px / 12px 2px,
+      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 3px 13px / 18px 3px,
       /* Pants */
-      linear-gradient(#333, #333) 4px 13px / 8px 5px,
+      linear-gradient(#333, #333) 6px 19px / 12px 7px,
       /* Left leg */
-      linear-gradient(#222, #222) 4px 18px / 3px 4px,
+      linear-gradient(#222, #222) 6px 26px / 5px 6px,
       /* Right leg */
-      linear-gradient(#222, #222) 9px 18px / 3px 4px;
+      linear-gradient(#222, #222) 13px 26px / 5px 6px;
     background-repeat: no-repeat;
-    animation: skate 0.6s steps(2) infinite;
+    animation: skate var(--duration, 4s) ease-in-out infinite;
+    animation-delay: var(--animation-delay, 0s);
   }
 
   .pixel-player.home {
@@ -2410,140 +2488,180 @@
   }
 
   .pixel-player.goalie {
-    width: 20px;
-    height: 26px;
-    /* Goalie with pads */
+    width: 30px;
+    height: 38px;
+    /* Goalie with pads - scaled 1.5x */
     background:
       /* Head */
-      linear-gradient(#f5d0c5, #f5d0c5) 6px 0 / 8px 5px,
+      linear-gradient(#f5d0c5, #f5d0c5) 9px 0 / 12px 7px,
       /* Mask */
-      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 6px 0 / 8px 3px,
+      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 9px 0 / 12px 4px,
       /* Jersey */
-      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 2px 5px / 16px 10px,
+      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 3px 7px / 24px 14px,
       /* Stripe */
-      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 2px 9px / 16px 2px,
+      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 3px 13px / 24px 3px,
       /* Pads */
-      linear-gradient(#f0f0f0, #f0f0f0) 2px 15px / 16px 11px,
+      linear-gradient(#f0f0f0, #f0f0f0) 3px 21px / 24px 17px,
       /* Pad stripes */
-      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 4px 17px / 2px 7px,
-      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 14px 17px / 2px 7px;
+      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 6px 24px / 3px 11px,
+      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 21px 24px / 3px 11px;
     background-repeat: no-repeat;
-    animation: goalie-sway 1.5s ease-in-out infinite;
+    animation: goalie-sway 2s ease-in-out infinite;
   }
 
+  /* Training skating - wide movement across the rink */
   @keyframes skate {
-    0%, 100% { transform: translate(-50%, -50%) translateY(0); }
-    50% { transform: translate(-50%, -50%) translateY(-1px); }
+    0% { transform: translate(-50%, -50%) translate(0, 0); }
+    15% { transform: translate(-50%, -50%) translate(25%, 10%) translateY(-2px); }
+    30% { transform: translate(-50%, -50%) translate(45%, 5%); }
+    45% { transform: translate(-50%, -50%) translate(30%, 20%) translateY(-2px); }
+    60% { transform: translate(-50%, -50%) translate(10%, 15%); }
+    75% { transform: translate(-50%, -50%) translate(-5%, 5%) translateY(-2px); }
+    90% { transform: translate(-50%, -50%) translate(5%, -5%); }
+    100% { transform: translate(-50%, -50%) translate(0, 0); }
   }
 
   .pixel-player.match-mode {
-    animation: skate-fast 0.3s steps(2) infinite;
+    animation: skate-fast var(--duration, 4s) ease-in-out infinite;
   }
 
+  /* Match skating - faster, more aggressive movement */
   @keyframes skate-fast {
-    0%, 100% { transform: translate(-50%, -50%) translateY(0); }
-    50% { transform: translate(-50%, -50%) translateY(-2px); }
+    0% { transform: translate(-50%, -50%) translate(0, 0); }
+    12% { transform: translate(-50%, -50%) translate(20%, 15%) translateY(-3px); }
+    25% { transform: translate(-50%, -50%) translate(35%, 5%); }
+    37% { transform: translate(-50%, -50%) translate(25%, -10%) translateY(-3px); }
+    50% { transform: translate(-50%, -50%) translate(10%, 5%); }
+    62% { transform: translate(-50%, -50%) translate(-5%, 15%) translateY(-3px); }
+    75% { transform: translate(-50%, -50%) translate(5%, 20%); }
+    87% { transform: translate(-50%, -50%) translate(15%, 10%) translateY(-3px); }
+    100% { transform: translate(-50%, -50%) translate(0, 0); }
   }
 
+  /* Goalie moves side to side tracking the puck */
   @keyframes goalie-sway {
-    0%, 100% { transform: translate(-50%, -50%) translateX(0); }
-    50% { transform: translate(-50%, -50%) translateX(3px); }
+    0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
+    25% { transform: translate(-50%, -50%) translate(0, -8px); }
+    50% { transform: translate(-50%, -50%) translate(3px, 5px); }
+    75% { transform: translate(-50%, -50%) translate(-3px, -3px); }
   }
 
-  /* Referee - black/white striped */
+  /* Referee - black/white striped - scaled 1.5x */
   .pixel-referee {
     position: absolute;
-    width: 14px;
-    height: 20px;
+    width: 21px;
+    height: 30px;
     image-rendering: pixelated;
     transform: translate(-50%, -50%);
     z-index: 9;
     background:
       /* Head */
-      linear-gradient(#f5d0c5, #f5d0c5) 3px 0 / 8px 4px,
+      linear-gradient(#f5d0c5, #f5d0c5) 5px 0 / 12px 6px,
       /* Striped jersey */
       repeating-linear-gradient(
         0deg,
-        #000 0px, #000 2px,
-        #fff 2px, #fff 4px
-      ) 1px 4px / 12px 8px,
+        #000 0px, #000 3px,
+        #fff 3px, #fff 6px
+      ) 2px 6px / 18px 12px,
       /* Black pants */
-      linear-gradient(#1a1a1a, #1a1a1a) 3px 12px / 8px 4px,
+      linear-gradient(#1a1a1a, #1a1a1a) 5px 18px / 12px 6px,
       /* Legs */
-      linear-gradient(#333, #333) 3px 16px / 3px 4px,
-      linear-gradient(#333, #333) 8px 16px / 3px 4px;
+      linear-gradient(#333, #333) 5px 24px / 5px 6px,
+      linear-gradient(#333, #333) 12px 24px / 5px 6px;
     background-repeat: no-repeat;
-    animation: referee-move 2s ease-in-out infinite;
+    animation: referee-follow 4s ease-in-out infinite;
   }
 
-  @keyframes referee-move {
-    0%, 100% { transform: translate(-50%, -50%) translateX(-5px); }
-    50% { transform: translate(-50%, -50%) translateX(5px); }
+  /* Referee follows the play action */
+  @keyframes referee-follow {
+    0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
+    20% { transform: translate(-50%, -50%) translate(15%, 8%) translateY(-1px); }
+    40% { transform: translate(-50%, -50%) translate(25%, 12%); }
+    60% { transform: translate(-50%, -50%) translate(10%, 18%) translateY(-1px); }
+    80% { transform: translate(-50%, -50%) translate(-5%, 10%); }
   }
 
-  /* Coach */
+  /* Coach - stands near bench and gestures - scaled 1.5x */
   .pixel-coach {
     position: absolute;
-    width: 16px;
-    height: 24px;
+    width: 24px;
+    height: 36px;
     image-rendering: pixelated;
     transform: translate(-50%, -50%);
     z-index: 8;
     background:
       /* Head */
-      linear-gradient(#f5d0c5, #f5d0c5) 4px 0 / 8px 5px,
+      linear-gradient(#f5d0c5, #f5d0c5) 6px 0 / 12px 7px,
       /* Cap */
-      linear-gradient(var(--team-primary, #dc2626), var(--team-primary, #dc2626)) 2px 0 / 12px 3px,
+      linear-gradient(var(--team-primary, #dc2626), var(--team-primary, #dc2626)) 3px 0 / 18px 4px,
       /* Jacket */
-      linear-gradient(#2d3748, #2d3748) 2px 5px / 12px 10px,
+      linear-gradient(#2d3748, #2d3748) 3px 7px / 18px 15px,
       /* Team logo on jacket */
-      linear-gradient(var(--team-primary, #dc2626), var(--team-primary, #dc2626)) 5px 8px / 6px 4px,
+      linear-gradient(var(--team-primary, #dc2626), var(--team-primary, #dc2626)) 8px 12px / 9px 6px,
       /* Pants */
-      linear-gradient(#1a1a1a, #1a1a1a) 4px 15px / 8px 5px,
+      linear-gradient(#1a1a1a, #1a1a1a) 6px 22px / 12px 7px,
       /* Legs */
-      linear-gradient(#222, #222) 4px 20px / 3px 4px,
-      linear-gradient(#222, #222) 9px 20px / 3px 4px;
+      linear-gradient(#222, #222) 6px 29px / 5px 6px,
+      linear-gradient(#222, #222) 13px 29px / 5px 6px;
     background-repeat: no-repeat;
-    animation: coach-gesture 3s ease-in-out infinite;
+    animation: coach-gesture 4s ease-in-out infinite;
   }
 
+  /* Coach gestures and occasionally walks along bench */
   @keyframes coach-gesture {
-    0%, 40%, 100% { transform: translate(-50%, -50%) scale(1); }
-    50%, 60% { transform: translate(-50%, -50%) scale(1.05); }
+    0%, 30%, 100% { transform: translate(-50%, -50%) scale(1) translate(0, 0); }
+    35%, 45% { transform: translate(-50%, -50%) scale(1.08) translate(0, 0); }
+    50%, 70% { transform: translate(-50%, -50%) scale(1) translate(-10px, 0); }
+    75%, 95% { transform: translate(-50%, -50%) scale(1) translate(5px, 0); }
   }
 
-  /* Pixel Puck */
+  /* Pixel Puck - scaled for larger rink */
   .pixel-puck {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 8px;
-    height: 8px;
-    background: radial-gradient(circle at 30% 30%, #444, #111);
+    width: 12px;
+    height: 12px;
+    background: radial-gradient(circle at 30% 30%, #333, #000);
     border-radius: 50%;
     transform: translate(-50%, -50%);
     z-index: 15;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-    animation: puck-idle 2s ease-in-out infinite;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+    animation: puck-pass 6s linear infinite;
   }
 
-  @keyframes puck-idle {
-    0%, 100% { transform: translate(-50%, -50%); }
-    25% { transform: translate(-60%, -60%); }
-    50% { transform: translate(-40%, -50%); }
-    75% { transform: translate(-50%, -40%); }
+  /* Training puck - passes between players across the rink */
+  @keyframes puck-pass {
+    0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
+    10% { transform: translate(-50%, -50%) translate(80px, 30px); }
+    20% { transform: translate(-50%, -50%) translate(150px, -20px); }
+    30% { transform: translate(-50%, -50%) translate(100px, 50px); }
+    40% { transform: translate(-50%, -50%) translate(40px, 70px); }
+    50% { transform: translate(-50%, -50%) translate(-30px, 40px); }
+    60% { transform: translate(-50%, -50%) translate(-80px, -10px); }
+    70% { transform: translate(-50%, -50%) translate(-40px, -40px); }
+    80% { transform: translate(-50%, -50%) translate(20px, -30px); }
+    90% { transform: translate(-50%, -50%) translate(50px, 10px); }
   }
 
   .pixel-puck.match-mode {
-    animation: puck-match 0.8s ease-in-out infinite;
+    animation: puck-battle 4s linear infinite;
   }
 
-  @keyframes puck-match {
-    0% { left: 45%; top: 50%; }
-    25% { left: 55%; top: 40%; }
-    50% { left: 60%; top: 55%; }
-    75% { left: 40%; top: 45%; }
-    100% { left: 45%; top: 50%; }
+  /* Match puck - fast passes between teams, back and forth action */
+  @keyframes puck-battle {
+    0% { transform: translate(-50%, -50%) translate(0, 0); }
+    8% { transform: translate(-50%, -50%) translate(100px, -20px); }
+    16% { transform: translate(-50%, -50%) translate(60px, 40px); }
+    24% { transform: translate(-50%, -50%) translate(-50px, 20px); }
+    32% { transform: translate(-50%, -50%) translate(-120px, -30px); }
+    40% { transform: translate(-50%, -50%) translate(-80px, 50px); }
+    48% { transform: translate(-50%, -50%) translate(30px, 30px); }
+    56% { transform: translate(-50%, -50%) translate(90px, -10px); }
+    64% { transform: translate(-50%, -50%) translate(40px, -50px); }
+    72% { transform: translate(-50%, -50%) translate(-60px, -20px); }
+    80% { transform: translate(-50%, -50%) translate(-30px, 40px); }
+    88% { transform: translate(-50%, -50%) translate(20px, 20px); }
+    96% { transform: translate(-50%, -50%) translate(10px, -10px); }
+    100% { transform: translate(-50%, -50%) translate(0, 0); }
   }
 
   /* Click indicator */

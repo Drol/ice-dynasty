@@ -71,7 +71,8 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should increase training minutes on click', async ({ page }) => {
-      const trainButton = page.getByRole('button', { name: /^\+\d/ });
+      // Click the Train button (action button in rink actions)
+      const trainButton = page.locator('.action-btn.training-btn');
       await trainButton.click();
       await trainButton.click();
       await trainButton.click();
@@ -111,11 +112,11 @@ test.describe('Ice Dynasty Game', () => {
       // Click Balanced tactic button to start match
       await page.getByRole('button', { name: /Balanced/i }).click();
 
-      // Wait for match animation (~2.5s) + result display (result shows while in match mode)
-      await page.waitForTimeout(3500);
+      // Wait for match animation (~5s) + result display in scoreboard
+      await page.waitForTimeout(6000);
 
-      // Should show Victory! or Defeat in result label
-      await expect(page.locator('.result-label')).toBeVisible({ timeout: 10000 });
+      // Should show WIN! or LOSS in the NES-style scoreboard
+      await expect(page.locator('.scoreboard-result')).toBeVisible({ timeout: 10000 });
     });
 
     test('should update record after match', async ({ page }) => {
