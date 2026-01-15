@@ -22,6 +22,9 @@ import {
   getStartingMoney,
   getChallengeRestriction,
   getChallengeGoalWins,
+  BOOST_DURATION_MS,
+  BOOST_MAX_DURATION_MS,
+  BOOST_MULTIPLIER,
 } from '$lib/game/formulas';
 
 const STORAGE_KEY = 'ice-dynasty-save';
@@ -278,19 +281,23 @@ function loadState(): GameState {
       };
 
       // Migrate old training format to new simplified format
-      let migratedTraining = { minutes: 0 };
+      let migratedTraining = { minutes: 0, boostUntil: 0 };
       if (parsed.training) {
         if ('minutes' in parsed.training) {
           // Already in new format
-          migratedTraining = { minutes: parsed.training.minutes };
+          migratedTraining = {
+            minutes: parsed.training.minutes,
+            boostUntil: (parsed.training as { boostUntil?: number }).boostUntil || 0
+          };
         } else if ('totalMinutes' in parsed.training) {
           // Old format with totalMinutes
-          migratedTraining = { minutes: (parsed.training as { totalMinutes: number }).totalMinutes };
+          migratedTraining = { minutes: (parsed.training as { totalMinutes: number }).totalMinutes, boostUntil: 0 };
         } else if ('conditioning' in parsed.training) {
           // Old cascade format - sum all types
           const oldTraining = parsed.training as { conditioning?: number; skating?: number; shooting?: number };
           migratedTraining = {
-            minutes: (oldTraining.conditioning || 0) + (oldTraining.skating || 0) + (oldTraining.shooting || 0)
+            minutes: (oldTraining.conditioning || 0) + (oldTraining.skating || 0) + (oldTraining.shooting || 0),
+            boostUntil: 0
           };
         }
       }
@@ -389,6 +396,7 @@ function createGameStore() {
             return {
               ...state,
               training: {
+                ...state.training,
                 minutes: state.training.minutes + offlineMinutes,
               },
               lastTick: now,
@@ -423,6 +431,7 @@ function createGameStore() {
         },
         training: {
           minutes: 0,
+          boostUntil: 0,
         },
         currentTactic: 'balanced',
         resources: {
@@ -470,6 +479,13 @@ function createGameStore() {
         const trainingRate = calculateTrainingRate(state);
         let trainingGained = trainingRate * deltaSeconds;
 
+        // Apply boost multiplier if active
+        const now = Date.now();
+        const isBoostActive = state.training.boostUntil > now;
+        if (isBoostActive) {
+          trainingGained *= BOOST_MULTIPLIER;
+        }
+
         // Training decay for intensive_training challenge (5% per second)
         let trainingDecay = 0;
         if (restriction?.type === 'trainingDecay') {
@@ -502,6 +518,7 @@ function createGameStore() {
         return {
           ...state,
           training: {
+            ...state.training,
             minutes: Math.max(0, state.training.minutes + trainingGained - trainingDecay),
           },
           resources: {
@@ -551,10 +568,21 @@ function createGameStore() {
 
         if (activeChallenge?.id === 'underdog') {
           // Base click power only (no upgrades)
-          clickPower = 1;
+          clickPower = 30; // BASE_CLICK_POWER
         } else {
           clickPower = calculateClickPower(state);
         }
+
+        // Click power scales boost duration: 30 power = 5s, 60 power = 10s, etc.
+        const boostDurationFromClick = BOOST_DURATION_MS * (clickPower / 30);
+
+        // Calculate new boost end time (add scaled duration, cap at max)
+        const currentBoostRemaining = Math.max(0, state.training.boostUntil - now);
+        const newBoostDuration = Math.min(
+          currentBoostRemaining + boostDurationFromClick,
+          BOOST_MAX_DURATION_MS
+        );
+        const newBoostUntil = now + newBoostDuration;
 
         // Keep only clicks from the last 10 seconds for achievement tracking
         const recentClicks = state.stats.clickTimestamps.filter(
@@ -564,7 +592,8 @@ function createGameStore() {
         return {
           ...state,
           training: {
-            minutes: state.training.minutes + clickPower,
+            ...state.training,
+            boostUntil: newBoostUntil,
           },
           stats: {
             ...state.stats,
@@ -639,17 +668,20 @@ function createGameStore() {
       // Get challenge restriction if active
       const challengeRestriction = activeChallenge ? getActiveChallengeRestriction(activeChallenge) : null;
 
-      // Apply challenge restrictions to win chance (winChanceCap)
+      // Apply challenge restrictions to win chance
       if (challengeRestriction?.type === 'winChanceCap') {
         const cap = challengeRestriction.value as number || 0.4;
         winChance = Math.min(cap, winChance);
+      } else if (challengeRestriction?.type === 'winChanceReduction') {
+        const reduction = challengeRestriction.value as number || 0.1;
+        winChance = Math.max(0.05, winChance - reduction); // Min 5% chance
       }
 
       // Simulate match with potentially modified win chance
       let result = simulateMatch(state);
 
-      // Re-simulate if challenge caps win chance (override the result based on capped chance)
-      if (challengeRestriction?.type === 'winChanceCap') {
+      // Re-simulate if challenge affects win chance (override the result based on modified chance)
+      if (challengeRestriction?.type === 'winChanceCap' || challengeRestriction?.type === 'winChanceReduction') {
         const roll = Math.random();
         const won = roll < winChance;
         result = {
@@ -716,6 +748,7 @@ function createGameStore() {
           ...s,
           // Deduct training cost for match
           training: {
+            ...s.training,
             minutes: s.training.minutes - matchCost,
           },
           resources: {
@@ -828,9 +861,10 @@ function createGameStore() {
           money: startMoney,
           reputation: s.resources.reputation,
         },
-        // Reset training
+        // Reset training (and clear boost)
         training: {
           minutes: 0,
+          boostUntil: 0,
         },
         // Reset morale
         morale: {
@@ -907,9 +941,10 @@ function createGameStore() {
           money: startMoney,
           reputation: s.resources.reputation + reputationGained,
         },
-        // Reset training
+        // Reset training (and clear boost)
         training: {
           minutes: 0,
+          boostUntil: 0,
         },
         // Reset morale
         morale: {
@@ -1086,6 +1121,14 @@ export const totalMinutes = derived(
 );
 
 /**
+ * Training boost end timestamp (0 = no boost)
+ */
+export const boostUntil = derived(
+  gameState,
+  ($state) => $state.training.boostUntil
+);
+
+/**
  * All upgrades with their unlock status
  */
 export const upgradesWithStatus = derived(gameState, ($state) =>
@@ -1169,13 +1212,16 @@ export const moraleMultiplier = derived(
 export const winChance = derived(gameState, ($state) => {
   let chance = calculateWinChance($state);
 
-  // Apply challenge restrictions (winChanceCap)
+  // Apply challenge restrictions
   const activeChall = $state.challenges.find((c) => c.active);
   if (activeChall) {
     const restriction = getActiveChallengeRestriction(activeChall);
     if (restriction.type === 'winChanceCap') {
       const cap = restriction.value as number || 0.4;
       chance = Math.min(cap, chance);
+    } else if (restriction.type === 'winChanceReduction') {
+      const reduction = restriction.value as number || 0.1;
+      chance = Math.max(0.05, chance - reduction); // Min 5% chance
     }
   }
 

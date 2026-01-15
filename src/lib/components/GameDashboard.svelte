@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus, matchCost as matchCostStore, canAffordMatch as canAffordMatchStore, affordableUpgradesCount, affordableRepUpgradesCount, autoMatchInterval as autoMatchIntervalStore, timeUntilAutoMatch as timeUntilAutoMatchStore } from '$lib/stores/game-state';
+  import { gameState, trainingRate, totalMinutes, clickPower, visibleUpgrades, lockedUpgrades, matchesUnlocked, MATCH_UNLOCK_THRESHOLD, moraleMultiplier, winChance, challengesWithStatus, activeChallenge as activeChallengeStore, completedChallenges, currentTactic as currentTacticStore, passiveIncomeRate, currentSeason, seasonCompleted, seasonProgress, potentialReputationGain, currentReputation, reputationUpgradesWithStatus, matchCost as matchCostStore, canAffordMatch as canAffordMatchStore, affordableUpgradesCount, affordableRepUpgradesCount, autoMatchInterval as autoMatchIntervalStore, timeUntilAutoMatch as timeUntilAutoMatchStore, boostUntil as boostUntilStore } from '$lib/stores/game-state';
+  import { BOOST_MULTIPLIER } from '$lib/game/formulas';
   import { formatNumber, formatDuration, formatMoney } from '$lib/utils/format';
   import { calculateUpgradeCost, calculateMoraleCost, TACTIC_MODIFIERS, canAffordUpgrade, getChallengeGoalWins, getChallengeRestriction, getTotalChallengeReward, getNextLevelReward } from '$lib/game/formulas';
   import type { MatchTactic, ChallengeRestriction } from '$lib/game/types';
@@ -116,16 +117,26 @@
   let rippleId = 0;
   let showGoalCelebration = $state(false);
 
-  // Training boost: when clicking, players rush across the ice
-  let trainingBoost = $state(false);
-  let boostTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Training boost: track remaining boost time from store
+  const boostEndTime = $derived($boostUntilStore);
+  let boostRemaining = $state(0);  // Remaining boost time in seconds
+  let isBoostActive = $derived(boostRemaining > 0);
 
-  // Animation tick for skating frames (toggles every 250ms, faster when boosted)
+  // Update boost remaining every 100ms for smooth countdown
+  $effect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      boostRemaining = Math.max(0, (boostEndTime - now) / 1000);
+    }, 100);
+    return () => clearInterval(interval);
+  });
+
+  // Animation tick for skating frames (faster when boosted: 100ms vs 250ms)
   let skateTick = $state(0);
   $effect(() => {
     const interval = setInterval(() => {
       skateTick = (skateTick + 1) % 2;
-    }, trainingBoost ? 100 : 250);
+    }, isBoostActive ? 100 : 250);
     return () => clearInterval(interval);
   });
 
@@ -139,13 +150,6 @@
 
   function handleTrainClick(e: MouseEvent) {
     gameState.clickTrain();
-
-    // Trigger training boost animation (players rush across ice)
-    trainingBoost = true;
-    if (boostTimeout) clearTimeout(boostTimeout);
-    boostTimeout = setTimeout(() => {
-      trainingBoost = false;
-    }, 1200);
 
     // Add ripple effect at click position
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -413,13 +417,6 @@
   function handleTrainButtonClick() {
     if (rinkMode === 'training' && !isPlayingMatch) {
       gameState.clickTrain();
-
-      // Trigger training boost animation
-      trainingBoost = true;
-      if (boostTimeout) clearTimeout(boostTimeout);
-      boostTimeout = setTimeout(() => {
-        trainingBoost = false;
-      }, 1200);
     }
   }
 
@@ -487,9 +484,6 @@
       }
       if (matchClockInterval) {
         clearInterval(matchClockInterval);
-      }
-      if (boostTimeout) {
-        clearTimeout(boostTimeout);
       }
     };
   });
@@ -702,6 +696,7 @@
             <button
               class="action-btn training-btn"
               class:active={rinkMode === 'training' && !isPlayingMatch}
+              class:boosted={isBoostActive}
               onclick={handleTrainButtonClick}
               disabled={isPlayingMatch}
             >
@@ -709,7 +704,11 @@
                 <path d="M12 2L8 6H4v4l-2 2 2 2v4h4l4 4 4-4h4v-4l2-2-2-2V6h-4l-4-4z"/>
               </svg>
               <span class="action-label">Train</span>
-              <span class="action-value">+{formatNumber(clickPwr)}/click</span>
+              {#if isBoostActive}
+                <span class="action-value boost-active">{BOOST_MULTIPLIER}x • {boostRemaining.toFixed(1)}s</span>
+              {:else}
+                <span class="action-value">+{(clickPwr / 6).toFixed(0)}s boost</span>
+              {/if}
             </button>
           </div>
 
@@ -836,13 +835,22 @@
                 </div>
               {/if}
             {:else}
-              <!-- Training mode: show training rate -->
-              <div class="training-scoreboard">
-                <svg class="training-icon" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
-                </svg>
-                <span class="training-label">Training</span>
-                <span class="training-rate">+{formatNumber(rate)}/s</span>
+              <!-- Training mode: show training rate (boosted when active) -->
+              <div class="training-scoreboard" class:boosted={isBoostActive}>
+                {#if isBoostActive}
+                  <svg class="training-icon boost-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
+                  </svg>
+                  <span class="training-label">BOOST</span>
+                  <span class="training-rate boosted">+{formatNumber(rate * BOOST_MULTIPLIER)}/s</span>
+                  <span class="boost-timer">{boostRemaining.toFixed(1)}s</span>
+                {:else}
+                  <svg class="training-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                  </svg>
+                  <span class="training-label">Training</span>
+                  <span class="training-rate">+{formatNumber(rate)}/s</span>
+                {/if}
               </div>
             {/if}
           </div>
@@ -850,7 +858,7 @@
           <div
             class="unified-rink-container"
             class:match-mode={rinkMode === 'match'}
-            class:training-boost={trainingBoost}
+            class:training-boost={isBoostActive}
           >
             <div class="unified-rink">
               <!-- SVG Hockey Rink - NHL dimensions (200ft x 85ft) -->
@@ -2095,6 +2103,27 @@
     border-color: var(--ice-blue);
   }
 
+  .training-btn.boosted {
+    border-color: var(--score-gold);
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 152, 0, 0.1) 100%);
+    animation: btn-boost-pulse 0.6s ease-in-out infinite alternate;
+  }
+
+  @keyframes btn-boost-pulse {
+    from { box-shadow: 0 0 5px rgba(255, 193, 7, 0.3); }
+    to { box-shadow: 0 0 15px rgba(255, 193, 7, 0.5), 0 0 30px rgba(255, 193, 7, 0.2); }
+  }
+
+  .training-btn.boosted .action-icon {
+    color: var(--score-gold);
+    animation: lightning-flash 0.3s ease-in-out infinite alternate;
+  }
+
+  .training-btn .action-value.boost-active {
+    color: var(--score-gold);
+    font-weight: bold;
+  }
+
   .training-btn .action-icon {
     color: var(--ice-blue);
   }
@@ -2330,6 +2359,41 @@
     text-shadow: 0 0 8px var(--score-green);
   }
 
+  /* Boosted training scoreboard */
+  .training-scoreboard.boosted {
+    background: linear-gradient(135deg, #1a0a00 0%, #2a1500 100%);
+    border: 2px solid var(--score-gold);
+    animation: boost-pulse 0.5s ease-in-out infinite alternate;
+  }
+
+  .training-scoreboard .boost-icon {
+    color: var(--score-gold);
+    animation: lightning-flash 0.3s ease-in-out infinite alternate;
+  }
+
+  .training-scoreboard .training-rate.boosted {
+    color: var(--score-gold);
+    text-shadow: 0 0 12px var(--score-gold), 0 0 24px rgba(255, 193, 7, 0.5);
+    font-size: 1.5rem;
+  }
+
+  .training-scoreboard .boost-timer {
+    font-family: var(--font-score);
+    font-size: 1rem;
+    color: var(--ice-pale);
+    opacity: 0.8;
+  }
+
+  @keyframes boost-pulse {
+    from { box-shadow: 0 0 10px rgba(255, 193, 7, 0.3); }
+    to { box-shadow: 0 0 20px rgba(255, 193, 7, 0.6), 0 0 40px rgba(255, 193, 7, 0.2); }
+  }
+
+  @keyframes lightning-flash {
+    from { opacity: 0.8; transform: scale(1); }
+    to { opacity: 1; transform: scale(1.1); }
+  }
+
   /* Unified Rink Container */
   .unified-rink-container {
     display: block;
@@ -2338,14 +2402,62 @@
     margin: 0 auto;
   }
 
-  /* Training boost - players rush across ice when clicking */
+  /* Training boost - players rush across ice with larger movement */
+  .unified-rink-container.training-boost {
+    --player-range: 60%; /* Increased from ~20% to 60% */
+  }
+
+  .unified-rink-container.training-boost .unified-rink {
+    box-shadow:
+      0 0 30px rgba(255, 193, 7, 0.4),
+      0 0 60px rgba(255, 193, 7, 0.2),
+      inset 0 0 100px rgba(255, 193, 7, 0.1);
+    animation: rink-glow 0.8s ease-in-out infinite alternate;
+  }
+
+  @keyframes rink-glow {
+    from {
+      box-shadow:
+        0 0 20px rgba(255, 193, 7, 0.3),
+        0 0 40px rgba(255, 193, 7, 0.1);
+    }
+    to {
+      box-shadow:
+        0 0 40px rgba(255, 193, 7, 0.5),
+        0 0 80px rgba(255, 193, 7, 0.3),
+        inset 0 0 60px rgba(255, 193, 7, 0.05);
+    }
+  }
+
   .unified-rink-container.training-boost .pixel-player {
-    animation-duration: 1.2s !important;
-    animation-timing-function: ease-out !important;
+    animation-name: skate-boost !important;
+    animation-duration: 2s !important;
+    animation-timing-function: ease-in-out !important;
   }
 
   .unified-rink-container.training-boost .pixel-player.goalie {
-    animation-duration: 0.8s !important;
+    animation-name: goalie-sway-boost !important;
+    animation-duration: 1.2s !important;
+  }
+
+  /* Boosted skating - much larger movement across 60% of rink */
+  @keyframes skate-boost {
+    0% { transform: translate(-50%, -50%) translate(0, 0); }
+    12% { transform: translate(-50%, -50%) translate(150px, 40px); }
+    25% { transform: translate(-50%, -50%) translate(280px, 20px); }
+    37% { transform: translate(-50%, -50%) translate(200px, -30px); }
+    50% { transform: translate(-50%, -50%) translate(50px, 50px); }
+    62% { transform: translate(-50%, -50%) translate(-100px, 30px); }
+    75% { transform: translate(-50%, -50%) translate(-50px, -20px); }
+    87% { transform: translate(-50%, -50%) translate(100px, 10px); }
+    100% { transform: translate(-50%, -50%) translate(0, 0); }
+  }
+
+  @keyframes goalie-sway-boost {
+    0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
+    25% { transform: translate(-50%, -50%) translate(0, -25px); }
+    50% { transform: translate(-50%, -50%) translate(15px, 20px); }
+    75% { transform: translate(-50%, -50%) translate(-15px, -10px); }
   }
 
   /* Training mode: secondary squad uses swapped team colors */
