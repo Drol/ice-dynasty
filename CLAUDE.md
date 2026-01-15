@@ -49,6 +49,62 @@ src/
 └── app.css                       # Global styles + CSS variables
 ```
 
+## Component Guidelines
+
+### Size Limits
+- **Max 300 lines per component** - split into sub-components if larger
+- Feature-specific logic stays in feature components
+
+### Naming Conventions
+| Pattern | Example | Use Case |
+|---------|---------|----------|
+| `<Feature>Tab.svelte` | `UpgradesTab.svelte` | Tab content components |
+| `<Entity>Card.svelte` | `UpgradeCard.svelte` | List item cards |
+| `<Feature>Modal.svelte` | `SeasonEndModal.svelte` | Feature-specific modals |
+
+### Component Extraction Rules
+Extract when:
+- Component exceeds 300 lines
+- Same UI pattern repeats 3+ times
+- Tab/section can function independently
+
+Use shared components:
+- `Modal.svelte` for all dialogs
+- `DevTools.svelte` for development controls
+
+## State Management
+
+### Store Organization
+- **Single source of truth**: All game math in `formulas.ts`
+- **Never duplicate calculations** - import from formulas.ts
+- Use derived stores for computed values
+
+### Store Pattern
+```typescript
+// Good: Use formulas.ts
+const winChance = calculateWinChance(state);
+
+// Bad: Duplicate calculation inline
+const winChance = 0.4 + trainingBonus + upgradeBonus;
+```
+
+### Derived Stores
+- Keep derivations simple (no loops over large arrays)
+- Expensive computations should be memoized or moved to formulas.ts
+
+## Game Balance Constants
+
+All balance numbers centralized in `formulas.ts`:
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `BASE_TRAINING_RATE` | 1 | Training per second |
+| `BASE_CLICK_POWER` | 30 | Training per click |
+| `BASE_MATCH_COST` | 3000 | Training cost to play |
+| `MORALE_BASE_COST` | 100 | First morale level cost |
+
+When adding new balance values, add them to formulas.ts exports.
+
 ## Key Files
 
 ### `src/lib/game/types.ts`

@@ -397,8 +397,6 @@ function createGameStore() {
         }
       }
 
-      // Check challenge unlocks on load
-      this.updateChallengeUnlocks();
     },
 
     /**
@@ -530,12 +528,11 @@ function createGameStore() {
         }
       }
 
-      // Check time-based achievements and challenge unlocks periodically (every ~5 seconds)
+      // Check time-based achievements periodically (every ~5 seconds)
       if (Math.random() < deltaSeconds / 5) {
         const state = get({ subscribe });
         const newAchievements = checkAchievements(state);
         unlockAchievements(newAchievements);
-        this.updateChallengeUnlocks();
       }
     },
 
@@ -636,13 +633,8 @@ function createGameStore() {
 
       const activeChallenge = getActiveChallenge(state);
 
-      // Calculate win chance for achievement checking
-      const winChanceFromUpgrades = state.upgrades
-        .filter((u) => u.type === 'winChance')
-        .reduce((total, u) => total + u.level * u.effect, 0);
-      const trainingBonus = Math.min(0.3, state.training.minutes / 10000);
-      const moraleBonus = Math.floor(state.morale.level / 20) * 0.01;
-      let winChance = Math.min(0.9, 0.4 + trainingBonus + winChanceFromUpgrades + moraleBonus);
+      // Calculate win chance for achievement checking (use single source of truth)
+      let winChance = calculateWinChance(state);
 
       // Get challenge restriction if active
       const challengeRestriction = activeChallenge ? getActiveChallengeRestriction(activeChallenge) : null;
@@ -751,9 +743,6 @@ function createGameStore() {
           lastMatchTime: Date.now(),
         };
       });
-
-      // Check challenge unlocks after match
-      this.updateChallengeUnlocks();
 
       // Check achievements after match with context
       const updatedState = get({ subscribe });
@@ -987,15 +976,6 @@ function createGameStore() {
 
       if (success) this.save();
       return success;
-    },
-
-    /**
-     * Check and update challenge unlocks
-     * Note: All challenges are now unlocked from the start (AD-style)
-     * This function is kept for backwards compatibility but does nothing
-     */
-    updateChallengeUnlocks() {
-      // No-op - all challenges are available from start
     },
 
     /**
