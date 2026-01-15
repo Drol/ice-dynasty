@@ -112,14 +112,22 @@
   let rippleId = 0;
   let showGoalCelebration = $state(false);
 
-  // Animation tick for skating frames (toggles every 250ms)
+  // Training boost: when clicking, players rush across the ice
+  let trainingBoost = $state(false);
+  let boostTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Animation tick for skating frames (toggles every 250ms, faster when boosted)
   let skateTick = $state(0);
   $effect(() => {
     const interval = setInterval(() => {
       skateTick = (skateTick + 1) % 2;
-    }, 250);
+    }, trainingBoost ? 100 : 250);
     return () => clearInterval(interval);
   });
+
+  // Match clock countdown (5 seconds)
+  let matchTimeRemaining = $state(0);
+  let matchClockInterval: ReturnType<typeof setInterval> | null = null;
 
   // Match cost (training minutes)
   const currentMatchCost = $derived($matchCostStore);
@@ -127,6 +135,13 @@
 
   function handleTrainClick(e: MouseEvent) {
     gameState.clickTrain();
+
+    // Trigger training boost animation (players rush across ice)
+    trainingBoost = true;
+    if (boostTimeout) clearTimeout(boostTimeout);
+    boostTimeout = setTimeout(() => {
+      trainingBoost = false;
+    }, 1200);
 
     // Add ripple effect at click position
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -340,12 +355,27 @@
     animationDelay: number;
   }
 
-  // Training: 4 players skating wide across the rink
+  // Training: Practice scrimmage - same team split into primary/secondary color squads
+  // 'home' = primary color squad, 'away' = secondary color squad (swapped jersey colors)
   const trainingPlayers: RinkPlayer[] = [
-    { id: 1, team: 'home', path: [[20, 25], [45, 35], [70, 30], [55, 50], [30, 45], [20, 25]], animationDuration: 6, animationDelay: 0 },
-    { id: 2, team: 'home', path: [[75, 70], [50, 60], [30, 65], [45, 75], [65, 70], [75, 70]], animationDuration: 7, animationDelay: 1 },
-    { id: 3, team: 'home', path: [[60, 25], [80, 40], [70, 60], [45, 55], [55, 35], [60, 25]], animationDuration: 6.5, animationDelay: 0.5 },
-    { id: 4, team: 'home', path: [[25, 60], [40, 45], [60, 50], [50, 70], [30, 75], [25, 60]], animationDuration: 7.5, animationDelay: 1.5 },
+    // Primary squad goalie (left side)
+    { id: 1, team: 'home', isGoalie: true, path: [[12, 40], [12, 55], [14, 50], [12, 45], [12, 55]], animationDuration: 3.5, animationDelay: 0 },
+    // Secondary squad goalie (right side)
+    { id: 2, team: 'away', isGoalie: true, path: [[88, 55], [88, 40], [86, 50], [88, 55], [88, 45]], animationDuration: 3.5, animationDelay: 0.2 },
+    // Primary squad forwards
+    { id: 3, team: 'home', path: [[25, 25], [50, 30], [75, 35], [60, 50], [35, 45], [25, 25]], animationDuration: 6, animationDelay: 0 },
+    { id: 4, team: 'home', path: [[25, 75], [50, 70], [75, 65], [60, 50], [35, 55], [25, 75]], animationDuration: 6.2, animationDelay: 0.3 },
+    { id: 5, team: 'home', path: [[35, 50], [55, 40], [70, 50], [55, 60], [35, 50]], animationDuration: 5.5, animationDelay: 0.2 },
+    // Primary squad defense
+    { id: 6, team: 'home', path: [[20, 30], [28, 45], [20, 55], [15, 40], [20, 30]], animationDuration: 5, animationDelay: 0.4 },
+    { id: 7, team: 'home', path: [[20, 70], [28, 55], [20, 45], [15, 60], [20, 70]], animationDuration: 5.2, animationDelay: 0.5 },
+    // Secondary squad forwards
+    { id: 8, team: 'away', path: [[75, 25], [50, 30], [25, 35], [40, 50], [65, 45], [75, 25]], animationDuration: 6, animationDelay: 0.2 },
+    { id: 9, team: 'away', path: [[75, 75], [50, 70], [25, 65], [40, 50], [65, 55], [75, 75]], animationDuration: 6.2, animationDelay: 0.4 },
+    { id: 10, team: 'away', path: [[65, 50], [45, 40], [30, 50], [45, 60], [65, 50]], animationDuration: 5.5, animationDelay: 0.3 },
+    // Secondary squad defense
+    { id: 11, team: 'away', path: [[80, 30], [72, 45], [80, 55], [85, 40], [80, 30]], animationDuration: 5, animationDelay: 0.5 },
+    { id: 12, team: 'away', path: [[80, 70], [72, 55], [80, 45], [85, 60], [80, 70]], animationDuration: 5.2, animationDelay: 0.6 },
   ];
 
   // Match: 5v5 + goalies skating with wider movements
@@ -379,6 +409,13 @@
   function handleTrainButtonClick() {
     if (rinkMode === 'training' && !isPlayingMatch) {
       gameState.clickTrain();
+
+      // Trigger training boost animation
+      trainingBoost = true;
+      if (boostTimeout) clearTimeout(boostTimeout);
+      boostTimeout = setTimeout(() => {
+        trainingBoost = false;
+      }, 1200);
     }
   }
 
@@ -402,8 +439,22 @@
     isPlayingMatch = true;
     lastMatchResult = null; // Clear previous result
 
+    // Start match clock countdown (5 seconds)
+    matchTimeRemaining = 5.0;
+    if (matchClockInterval) clearInterval(matchClockInterval);
+    matchClockInterval = setInterval(() => {
+      matchTimeRemaining = Math.max(0, matchTimeRemaining - 0.1);
+    }, 100);
+
     // Play match after animation delay (5 seconds of gameplay)
     matchAnimationTimer = setTimeout(() => {
+      // Stop match clock
+      if (matchClockInterval) {
+        clearInterval(matchClockInterval);
+        matchClockInterval = null;
+      }
+      matchTimeRemaining = 0;
+
       const result = gameState.playMatch();
       if (result) {
         lastMatchResult = result;
@@ -423,11 +474,17 @@
     }, 5000); // 5 seconds of match animation
   }
 
-  // Cleanup timer on component destroy
+  // Cleanup timers on component destroy
   $effect(() => {
     return () => {
       if (matchAnimationTimer) {
         clearTimeout(matchAnimationTimer);
+      }
+      if (matchClockInterval) {
+        clearInterval(matchClockInterval);
+      }
+      if (boostTimeout) {
+        clearTimeout(boostTimeout);
       }
     };
   });
@@ -603,117 +660,108 @@
   <main class="main">
     <!-- Tab Content -->
     {#if activeTab === 'dashboard'}
-      <!-- Lagmoral (Global Multiplier) - Dashboard only -->
-      <section class="morale-panel">
-        <div class="morale-header">
-          <div class="morale-title">
-            <svg class="morale-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-            </svg>
-            <div class="morale-info">
-              <h3>Team Morale</h3>
-              <span class="morale-hint">Global multiplier for all production</span>
-            </div>
-          </div>
-          <div class="morale-stats">
-            <div class="morale-level">
-              <span class="level-label">Level</span>
-              <span class="level-value">{game.morale.level}/{game.morale.maxLevel}</span>
-            </div>
-            <div class="morale-multiplier">
-              <span class="mult-label">Boost</span>
-              <span class="mult-value">{moraleMult.toFixed(2)}x</span>
-            </div>
-          </div>
+      <!-- Lagmoral (Global Multiplier) - Compact single row -->
+      <section class="morale-panel-compact">
+        <svg class="morale-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+        <span class="morale-label">Morale</span>
+        <span class="morale-stat">{game.morale.level}/{game.morale.maxLevel}</span>
+        <span class="morale-mult">{moraleMult.toFixed(2)}x</span>
+        <div class="morale-progress-compact">
+          <div class="morale-progress-fill" style="width: {moraleProgress}%"></div>
         </div>
-
-        <div class="morale-progress-container">
-          <div class="morale-progress-bar">
-            <div class="morale-progress-fill" style="width: {moraleProgress}%"></div>
-          </div>
-        </div>
-
         <button
-          class="morale-boost-btn"
+          class="morale-boost-btn-compact"
           class:affordable={canAffordMorale}
           class:maxed={moraleMaxed}
           onclick={handleBoostMorale}
           disabled={!canAffordMorale || moraleMaxed}
         >
           {#if moraleMaxed}
-            <span class="btn-text">Maximum Morale</span>
+            <span>MAX</span>
           {:else}
-            <div class="btn-content">
-              <span class="btn-text">Boost Morale</span>
-              <span class="btn-cost">{formatMoney(moraleCost)}</span>
-            </div>
+            <span>Boost {formatMoney(moraleCost)}</span>
           {/if}
         </button>
       </section>
       <!-- Unified Rink Panel -->
       <section class="panel unified-rink-panel">
-        <!-- Action Buttons -->
+        <!-- Action Buttons - Training and Match groups -->
         <div class="rink-actions">
-          <button
-            class="action-btn training-btn"
-            class:active={rinkMode === 'training' && !isPlayingMatch}
-            onclick={handleTrainButtonClick}
-            disabled={isPlayingMatch}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
-              <path d="M12 2L8 6H4v4l-2 2 2 2v4h4l4 4 4-4h4v-4l2-2-2-2V6h-4l-4-4z"/>
-            </svg>
-            <span class="action-label">Train</span>
-            <span class="action-value">+{formatNumber(clickPwr)}/click</span>
-          </button>
-
-          {#if matchUnlocked}
+          <!-- Training Group -->
+          <div class="action-group training-group">
+            <span class="action-group-label">Practice</span>
             <button
-              class="action-btn offensive-btn"
-              class:active={tactic === 'offensive' && isPlayingMatch}
-              onclick={() => handleStartMatchWithTactic('offensive')}
-              disabled={!canAffordMatch || isPlayingMatch}
+              class="action-btn training-btn"
+              class:active={rinkMode === 'training' && !isPlayingMatch}
+              onclick={handleTrainButtonClick}
+              disabled={isPlayingMatch}
             >
               <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
-                <path d="M3 2l8 10-8 10h4l8-10-8-10H3z"/>
+                <path d="M12 2L8 6H4v4l-2 2 2 2v4h4l4 4 4-4h4v-4l2-2-2-2V6h-4l-4-4z"/>
               </svg>
-              <span class="action-label">Offensive</span>
-              <span class="action-value">-15% win, +50% $</span>
+              <span class="action-label">Train</span>
+              <span class="action-value">+{formatNumber(clickPwr)}/click</span>
             </button>
+          </div>
 
-            <button
-              class="action-btn balanced-btn"
-              class:active={tactic === 'balanced' && isPlayingMatch}
-              onclick={() => handleStartMatchWithTactic('balanced')}
-              disabled={!canAffordMatch || isPlayingMatch}
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-              <span class="action-label">Balanced</span>
-              <span class="action-value">No modifier</span>
-            </button>
+          <!-- Separator -->
+          <div class="action-separator"></div>
 
-            <button
-              class="action-btn defensive-btn"
-              class:active={tactic === 'defensive' && isPlayingMatch}
-              onclick={() => handleStartMatchWithTactic('defensive')}
-              disabled={!canAffordMatch || isPlayingMatch}
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
-                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-              </svg>
-              <span class="action-label">Defensive</span>
-              <span class="action-value">+10% win, -30% $</span>
-            </button>
-          {:else}
-            <div class="match-locked-info">
-              <svg class="lock-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/>
-              </svg>
-              <span>Train {formatNumber(MATCH_UNLOCK_THRESHOLD - minutes)} more min to unlock matches</span>
-            </div>
-          {/if}
+          <!-- Match Group -->
+          <div class="action-group match-group">
+            <span class="action-group-label">Play Match</span>
+            {#if matchUnlocked}
+              <div class="match-tactics">
+                <button
+                  class="action-btn offensive-btn"
+                  class:active={tactic === 'offensive' && isPlayingMatch}
+                  onclick={() => handleStartMatchWithTactic('offensive')}
+                  disabled={!canAffordMatch || isPlayingMatch}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                    <path d="M3 2l8 10-8 10h4l8-10-8-10H3z"/>
+                  </svg>
+                  <span class="action-label">Offensive</span>
+                  <span class="action-value">-15% win, +50% $</span>
+                </button>
+
+                <button
+                  class="action-btn balanced-btn"
+                  class:active={tactic === 'balanced' && isPlayingMatch}
+                  onclick={() => handleStartMatchWithTactic('balanced')}
+                  disabled={!canAffordMatch || isPlayingMatch}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                  <span class="action-label">Balanced</span>
+                  <span class="action-value">No modifier</span>
+                </button>
+
+                <button
+                  class="action-btn defensive-btn"
+                  class:active={tactic === 'defensive' && isPlayingMatch}
+                  onclick={() => handleStartMatchWithTactic('defensive')}
+                  disabled={!canAffordMatch || isPlayingMatch}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                  </svg>
+                  <span class="action-label">Defensive</span>
+                  <span class="action-value">+10% win, -30% $</span>
+                </button>
+              </div>
+            {:else}
+              <div class="match-locked-info">
+                <svg class="lock-icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/>
+                </svg>
+                <span>Train {formatNumber(MATCH_UNLOCK_THRESHOLD - minutes)} more min to unlock matches</span>
+              </div>
+            {/if}
+          </div>
         </div>
 
         <!-- Win Chance & Cost Info -->
@@ -738,38 +786,56 @@
           style="--team-primary: {game.club?.colors?.primary || '#dc2626'}; --team-secondary: {game.club?.colors?.secondary || '#ffffff'}; --opponent-primary: {opponentColors.primary}; --opponent-secondary: {opponentColors.secondary};"
         >
           <!-- NES-style Scoreboard above rink -->
-          <div class="nes-scoreboard">
-            <div class="scoreboard-team home">
-              <svg class="scoreboard-jersey" viewBox="0 0 24 24" style="--primary: var(--team-primary); --secondary: var(--team-secondary);">
-                <path class="jersey-body" d="M6 4L4 6v14h16V6l-2-2h-3v2a3 3 0 01-6 0V4H6z" fill="var(--primary)"/>
-                <path class="jersey-collar" d="M9 4v2a3 3 0 006 0V4" fill="none" stroke="var(--secondary)" stroke-width="1.5"/>
-                <path class="jersey-sleeves" d="M4 6L2 8v4l2-1V6zM20 6l2 2v4l-2-1V6z" fill="var(--secondary)"/>
-              </svg>
-              <span class="team-name">{game.club?.name || 'HOME'}</span>
-            </div>
-            <div class="scoreboard-score">
-              {#if lastMatchResult && rinkMode === 'match'}
-                <span class="score home">{lastMatchResult.goalsFor}</span>
-                <span class="score-separator">-</span>
-                <span class="score away">{lastMatchResult.goalsAgainst}</span>
-              {:else}
-                <span class="score home">0</span>
-                <span class="score-separator">-</span>
-                <span class="score away">0</span>
+          <div class="nes-scoreboard" class:training-mode={rinkMode === 'training'}>
+            {#if rinkMode === 'match'}
+              <!-- Match mode: show teams and score -->
+              <div class="scoreboard-team home">
+                <svg class="scoreboard-jersey" viewBox="0 0 24 24" style="--primary: var(--team-primary); --secondary: var(--team-secondary);">
+                  <path class="jersey-body" d="M6 4L4 6v14h16V6l-2-2h-3v2a3 3 0 01-6 0V4H6z" fill="var(--primary)"/>
+                  <path class="jersey-collar" d="M9 4v2a3 3 0 006 0V4" fill="none" stroke="var(--secondary)" stroke-width="1.5"/>
+                  <path class="jersey-sleeves" d="M4 6L2 8v4l2-1V6zM20 6l2 2v4l-2-1V6z" fill="var(--secondary)"/>
+                </svg>
+                <span class="team-name">{game.club?.name || 'HOME'}</span>
+              </div>
+              <!-- Match clock countdown (between team and score) -->
+              {#if isPlayingMatch && !lastMatchResult}
+                <div class="match-clock">
+                  <span class="clock-time">{matchTimeRemaining.toFixed(1)}</span>
+                </div>
               {/if}
-            </div>
-            <div class="scoreboard-team away">
-              <span class="team-name">Opponent</span>
-              <svg class="scoreboard-jersey" viewBox="0 0 24 24" style="--primary: var(--opponent-primary); --secondary: var(--opponent-secondary);">
-                <path class="jersey-body" d="M6 4L4 6v14h16V6l-2-2h-3v2a3 3 0 01-6 0V4H6z" fill="var(--primary)"/>
-                <path class="jersey-collar" d="M9 4v2a3 3 0 006 0V4" fill="none" stroke="var(--secondary)" stroke-width="1.5"/>
-                <path class="jersey-sleeves" d="M4 6L2 8v4l2-1V6zM20 6l2 2v4l-2-1V6z" fill="var(--secondary)"/>
-              </svg>
-            </div>
-            {#if lastMatchResult && rinkMode === 'match'}
-              <div class="scoreboard-result" class:won={lastMatchResult.won}>
-                {lastMatchResult.won ? 'WIN!' : 'LOSS'}
-                <span class="result-rewards">+{lastMatchResult.fansGained} fans, +{formatMoney(lastMatchResult.moneyEarned)}</span>
+              <div class="scoreboard-score">
+                {#if lastMatchResult}
+                  <span class="score home">{lastMatchResult.goalsFor}</span>
+                  <span class="score-separator">-</span>
+                  <span class="score away">{lastMatchResult.goalsAgainst}</span>
+                {:else}
+                  <span class="score home">0</span>
+                  <span class="score-separator">-</span>
+                  <span class="score away">0</span>
+                {/if}
+              </div>
+              <div class="scoreboard-team away">
+                <span class="team-name">Opponent</span>
+                <svg class="scoreboard-jersey" viewBox="0 0 24 24" style="--primary: var(--opponent-primary); --secondary: var(--opponent-secondary);">
+                  <path class="jersey-body" d="M6 4L4 6v14h16V6l-2-2h-3v2a3 3 0 01-6 0V4H6z" fill="var(--primary)"/>
+                  <path class="jersey-collar" d="M9 4v2a3 3 0 006 0V4" fill="none" stroke="var(--secondary)" stroke-width="1.5"/>
+                  <path class="jersey-sleeves" d="M4 6L2 8v4l2-1V6zM20 6l2 2v4l-2-1V6z" fill="var(--secondary)"/>
+                </svg>
+              </div>
+              {#if lastMatchResult}
+                <div class="scoreboard-result" class:won={lastMatchResult.won}>
+                  {lastMatchResult.won ? 'WIN!' : 'LOSS'}
+                  <span class="result-rewards">+{lastMatchResult.fansGained} fans, +{formatMoney(lastMatchResult.moneyEarned)}</span>
+                </div>
+              {/if}
+            {:else}
+              <!-- Training mode: show training rate -->
+              <div class="training-scoreboard">
+                <svg class="training-icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                </svg>
+                <span class="training-label">Training</span>
+                <span class="training-rate">+{formatNumber(rate)}/s</span>
               </div>
             {/if}
           </div>
@@ -777,6 +843,7 @@
           <div
             class="unified-rink-container"
             class:match-mode={rinkMode === 'match'}
+            class:training-boost={trainingBoost}
           >
             <div class="unified-rink">
               <!-- SVG Hockey Rink - NHL dimensions (200ft x 85ft) -->
@@ -1062,7 +1129,7 @@
               {/if}
 
               <!-- Puck with path animation -->
-              <div class="pixel-puck" class:match-mode={rinkMode === 'match'} style="left: {puckPath[0][0]}%; top: {puckPath[0][1]}%;"></div>
+              <div class="pixel-puck" class:match-mode={rinkMode === 'match'}></div>
             </div>
           </div>
         </div>
@@ -2160,223 +2227,102 @@
     opacity: 0.7;
   }
 
-  /* Morale Panel */
-  .morale-panel {
-    background: linear-gradient(
-      135deg,
-      var(--arena-surface) 0%,
-      var(--arena-dark) 100%
-    );
-    border: 2px solid var(--score-gold);
-    border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-    box-shadow: var(--shadow-card), 0 0 30px rgba(251, 191, 36, 0.1);
-    position: relative;
-    overflow: hidden;
-    margin-bottom: var(--space-lg);
-  }
-
-  .morale-panel::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, var(--score-gold), transparent);
-    opacity: 0.6;
-  }
-
-  .morale-header {
+  /* Morale Panel - Compact single row */
+  .morale-panel-compact {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: var(--space-md);
+    background: var(--arena-surface);
+    border: 1px solid var(--arena-elevated);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
     margin-bottom: var(--space-md);
-    gap: var(--space-md);
   }
 
-  .morale-title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-  }
-
-  .morale-icon {
-    width: 40px;
-    height: 40px;
+  .morale-panel-compact .morale-icon {
+    width: 20px;
+    height: 20px;
     color: var(--score-red);
-    filter: drop-shadow(0 0 10px var(--score-red));
+    flex-shrink: 0;
   }
 
-  .morale-info h3 {
-    font-size: 1.3rem;
-    color: var(--ice-white);
-    margin: 0 0 2px 0;
-    letter-spacing: 0.05em;
-  }
-
-  .morale-hint {
-    font-size: 0.7rem;
-    color: var(--ice-blue);
-    opacity: 0.7;
-  }
-
-  .morale-stats {
-    display: flex;
-    gap: var(--space-lg);
-  }
-
-  .morale-level,
-  .morale-multiplier {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .level-label,
-  .mult-label {
-    font-size: 0.65rem;
+  .morale-panel-compact .morale-label {
+    font-size: 0.75rem;
     color: var(--ice-pale);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-
-  .level-value {
-    font-family: var(--font-score);
-    font-size: 1.1rem;
-    color: var(--ice-white);
     letter-spacing: 0.05em;
+    white-space: nowrap;
   }
 
-  .mult-value {
+  .morale-panel-compact .morale-stat {
     font-family: var(--font-score);
-    font-size: 1.3rem;
+    font-size: 0.85rem;
+    color: var(--ice-white);
+    white-space: nowrap;
+  }
+
+  .morale-panel-compact .morale-mult {
+    font-family: var(--font-score);
+    font-size: 0.9rem;
     color: var(--score-gold);
-    text-shadow: 0 0 10px var(--score-gold);
+    font-weight: bold;
+    white-space: nowrap;
   }
 
-  .morale-progress-container {
-    margin-bottom: var(--space-md);
-  }
-
-  .morale-progress-bar {
-    height: 12px;
+  .morale-progress-compact {
+    flex: 1;
+    height: 8px;
+    min-width: 80px;
     background: var(--arena-deep);
     border-radius: var(--radius-sm);
     overflow: hidden;
-    position: relative;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
-  .morale-progress-fill {
+  .morale-progress-compact .morale-progress-fill {
     height: 100%;
-    background: linear-gradient(
-      90deg,
-      var(--score-red) 0%,
-      var(--score-gold) 50%,
-      var(--score-green) 100%
-    );
-    transition: width 0.5s ease;
-    box-shadow: 0 0 10px var(--score-gold);
-    position: relative;
+    background: linear-gradient(90deg, var(--score-red) 0%, var(--score-gold) 50%, var(--score-green) 100%);
+    transition: width 0.3s ease;
   }
 
-  .morale-progress-fill::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.3) 50%,
-      transparent 100%
-    );
-    animation: shimmer 2s infinite;
-  }
-
-  @keyframes shimmer {
-    0% {
-      transform: translateX(-100%);
-    }
-    100% {
-      transform: translateX(100%);
-    }
-  }
-
-  .morale-boost-btn {
-    width: 100%;
-    padding: var(--space-md);
-    background: linear-gradient(
-      135deg,
-      var(--arena-elevated) 0%,
-      var(--arena-dark) 100%
-    );
-    border: 2px solid var(--arena-elevated);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-    color: var(--ice-white);
-    letter-spacing: 0.1em;
-  }
-
-  .morale-boost-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-  }
-
-  .morale-boost-btn:active:not(:disabled) {
-    transform: translateY(0);
-  }
-
-  .morale-boost-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-
-  .morale-boost-btn.affordable {
-    background: linear-gradient(
-      135deg,
-      var(--score-gold) 0%,
-      #d97706 100%
-    );
-    border-color: var(--score-gold);
-    box-shadow: 0 4px 20px rgba(251, 191, 36, 0.3);
-  }
-
-  .morale-boost-btn.affordable:hover:not(:disabled) {
-    box-shadow: 0 8px 30px rgba(251, 191, 36, 0.4);
-  }
-
-  .morale-boost-btn.maxed {
-    background: linear-gradient(
-      135deg,
-      var(--score-green) 0%,
-      #15803d 100%
-    );
-    border-color: var(--score-green);
-    cursor: default;
-  }
-
-  .btn-content {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .btn-text {
-    text-transform: uppercase;
-  }
-
-  .btn-cost {
-    font-family: var(--font-score);
-    font-size: 1rem;
-    color: var(--ice-white);
-    background: rgba(0, 0, 0, 0.2);
-    padding: 0.25rem 0.75rem;
+  .morale-boost-btn-compact {
+    padding: var(--space-xs) var(--space-md);
+    background: var(--arena-elevated);
+    border: 1px solid var(--arena-elevated);
     border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    color: var(--ice-white);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+  }
+
+  .morale-boost-btn-compact:hover:not(:disabled) {
+    background: var(--arena-card);
+  }
+
+  .morale-boost-btn-compact:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .morale-boost-btn-compact.affordable {
+    background: var(--score-gold);
+    border-color: var(--score-gold);
+    color: var(--arena-deep);
+  }
+
+  .morale-boost-btn-compact.affordable:hover:not(:disabled) {
+    background: #d97706;
+  }
+
+  .morale-boost-btn-compact.maxed {
+    background: var(--score-green);
+    border-color: var(--score-green);
+    color: var(--arena-deep);
+    cursor: default;
   }
 
   /* Game Grid (legacy) */
@@ -2393,10 +2339,55 @@
 
   .rink-actions {
     display: flex;
-    gap: var(--space-sm);
+    gap: var(--space-md);
     margin-bottom: var(--space-md);
     flex-wrap: wrap;
     justify-content: center;
+    align-items: stretch;
+  }
+
+  /* Action groups - Training vs Match */
+  .action-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    background: var(--arena-surface);
+    border: 1px solid var(--arena-elevated);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm);
+    justify-content: flex-start;
+  }
+
+  .action-group-label {
+    font-size: 0.65rem;
+    color: var(--ice-pale);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    opacity: 0.7;
+  }
+
+  .training-group {
+    border-color: var(--ice-blue);
+    border-width: 2px;
+  }
+
+  .match-group {
+    border-color: var(--score-gold);
+    border-width: 2px;
+  }
+
+  .match-tactics {
+    display: flex;
+    gap: var(--space-sm);
+  }
+
+  /* Separator between groups */
+  .action-separator {
+    width: 2px;
+    height: 60px;
+    background: linear-gradient(to bottom, transparent, var(--arena-elevated), transparent);
+    align-self: center;
   }
 
   .action-btn {
@@ -2487,12 +2478,14 @@
   .match-locked-info {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
     background: rgba(0, 0, 0, 0.3);
     border-radius: var(--radius-md);
     color: var(--ice-pale);
     font-size: 0.75rem;
+    flex: 1;
   }
 
   .match-locked-info .lock-icon {
@@ -2627,12 +2620,87 @@
     color: var(--score-gold);
   }
 
+  /* Match Clock - inline in scoreboard */
+  .match-clock {
+    display: flex;
+    align-items: center;
+    background: #000;
+    border: 1px solid var(--score-red);
+    border-radius: var(--radius-sm);
+    padding: var(--space-xs) var(--space-sm);
+    margin: 0 var(--space-sm);
+  }
+
+  .match-clock .clock-time {
+    font-family: var(--font-score);
+    font-size: 1.1rem;
+    color: var(--score-red);
+    text-shadow: 0 0 8px var(--score-red);
+    animation: clock-pulse 0.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes clock-pulse {
+    from { opacity: 1; }
+    to { opacity: 0.7; }
+  }
+
+  /* Training mode scoreboard */
+  .nes-scoreboard.training-mode {
+    justify-content: center;
+  }
+
+  .training-scoreboard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    background: #000;
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-sm);
+  }
+
+  .training-scoreboard .training-icon {
+    width: 24px;
+    height: 24px;
+    color: var(--score-gold);
+  }
+
+  .training-scoreboard .training-label {
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    color: var(--ice-pale);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .training-scoreboard .training-rate {
+    font-family: var(--font-score);
+    font-size: 1.3rem;
+    color: var(--score-green);
+    text-shadow: 0 0 8px var(--score-green);
+  }
+
   /* Unified Rink Container */
   .unified-rink-container {
     display: block;
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
+  }
+
+  /* Training boost - players rush across ice when clicking */
+  .unified-rink-container.training-boost .pixel-player {
+    animation-duration: 1.2s !important;
+    animation-timing-function: ease-out !important;
+  }
+
+  .unified-rink-container.training-boost .pixel-player.goalie {
+    animation-duration: 0.8s !important;
+  }
+
+  /* Training mode: secondary squad uses swapped team colors */
+  .unified-rink-container:not(.match-mode) .pixel-player.away {
+    --jersey: var(--team-secondary) !important;
+    --stripe: var(--team-primary) !important;
   }
 
   /* NHL Rink: 200ft x 85ft = 2.35:1 ratio - FULL WIDTH */
@@ -2778,43 +2846,50 @@
     transform: translate(-50%, -50%);
     z-index: 15;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
-    animation: puck-pass 6s linear infinite;
+    animation: puck-pass 8s linear infinite;
   }
 
-  /* Training puck - passes between players across the rink */
+  /* Training puck - wide passes across the whole rink between players */
   @keyframes puck-pass {
-    0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
-    10% { transform: translate(-50%, -50%) translate(80px, 30px); }
-    20% { transform: translate(-50%, -50%) translate(150px, -20px); }
-    30% { transform: translate(-50%, -50%) translate(100px, 50px); }
-    40% { transform: translate(-50%, -50%) translate(40px, 70px); }
-    50% { transform: translate(-50%, -50%) translate(-30px, 40px); }
-    60% { transform: translate(-50%, -50%) translate(-80px, -10px); }
-    70% { transform: translate(-50%, -50%) translate(-40px, -40px); }
-    80% { transform: translate(-50%, -50%) translate(20px, -30px); }
-    90% { transform: translate(-50%, -50%) translate(50px, 10px); }
+    0% { left: 25%; top: 30%; }
+    8% { left: 35%; top: 50%; }
+    16% { left: 20%; top: 65%; }
+    24% { left: 45%; top: 40%; }
+    32% { left: 65%; top: 55%; }
+    40% { left: 80%; top: 35%; }
+    48% { left: 75%; top: 70%; }
+    56% { left: 55%; top: 50%; }
+    64% { left: 40%; top: 75%; }
+    72% { left: 30%; top: 45%; }
+    80% { left: 50%; top: 25%; }
+    88% { left: 70%; top: 50%; }
+    100% { left: 25%; top: 30%; }
   }
 
   .pixel-puck.match-mode {
-    animation: puck-battle 4s linear infinite;
+    animation: puck-battle 5s linear infinite;
   }
 
-  /* Match puck - fast passes between teams, back and forth action */
+  /* Match puck - fast back and forth between teams */
   @keyframes puck-battle {
-    0% { transform: translate(-50%, -50%) translate(0, 0); }
-    8% { transform: translate(-50%, -50%) translate(100px, -20px); }
-    16% { transform: translate(-50%, -50%) translate(60px, 40px); }
-    24% { transform: translate(-50%, -50%) translate(-50px, 20px); }
-    32% { transform: translate(-50%, -50%) translate(-120px, -30px); }
-    40% { transform: translate(-50%, -50%) translate(-80px, 50px); }
-    48% { transform: translate(-50%, -50%) translate(30px, 30px); }
-    56% { transform: translate(-50%, -50%) translate(90px, -10px); }
-    64% { transform: translate(-50%, -50%) translate(40px, -50px); }
-    72% { transform: translate(-50%, -50%) translate(-60px, -20px); }
-    80% { transform: translate(-50%, -50%) translate(-30px, 40px); }
-    88% { transform: translate(-50%, -50%) translate(20px, 20px); }
-    96% { transform: translate(-50%, -50%) translate(10px, -10px); }
-    100% { transform: translate(-50%, -50%) translate(0, 0); }
+    0% { left: 50%; top: 50%; }
+    6% { left: 35%; top: 35%; }
+    12% { left: 25%; top: 55%; }
+    18% { left: 20%; top: 40%; }
+    24% { left: 40%; top: 60%; }
+    30% { left: 55%; top: 45%; }
+    36% { left: 70%; top: 55%; }
+    42% { left: 80%; top: 35%; }
+    48% { left: 75%; top: 65%; }
+    54% { left: 60%; top: 50%; }
+    60% { left: 45%; top: 40%; }
+    66% { left: 30%; top: 60%; }
+    72% { left: 25%; top: 45%; }
+    78% { left: 40%; top: 55%; }
+    84% { left: 60%; top: 40%; }
+    90% { left: 75%; top: 50%; }
+    96% { left: 55%; top: 45%; }
+    100% { left: 50%; top: 50%; }
   }
 
   /* Click indicator */
