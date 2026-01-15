@@ -112,6 +112,15 @@
   let rippleId = 0;
   let showGoalCelebration = $state(false);
 
+  // Animation tick for skating frames (toggles every 250ms)
+  let skateTick = $state(0);
+  $effect(() => {
+    const interval = setInterval(() => {
+      skateTick = (skateTick + 1) % 2;
+    }, 250);
+    return () => clearInterval(interval);
+  });
+
   // Match cost (training minutes)
   const currentMatchCost = $derived($matchCostStore);
   const canAffordMatch = $derived($canAffordMatchStore);
@@ -830,26 +839,226 @@
                 <line x1="192" y1="40" x2="192" y2="45" stroke="#ccc" stroke-width="0.2" />
               </svg>
 
-              <!-- Pixel Players with skating animations -->
+              <!-- SVG Pixel Players - NES Ice Hockey style (side view) -->
               {#each rinkPlayers as player (player.id)}
-                <div
-                  class="pixel-player"
-                  class:home={player.team === 'home'}
-                  class:away={player.team === 'away'}
-                  class:goalie={player.isGoalie}
+                <svg
+                  class="pixel-player {player.team} {player.isGoalie ? 'goalie' : ''} {skateTick === 0 ? 'skate1' : 'skate2'}"
                   class:match-mode={rinkMode === 'match'}
-                  style="left: {player.path[0][0]}%; top: {player.path[0][1]}%; --move-x: {(player.path[1]?.[0] || player.path[0][0]) - player.path[0][0]}%; --move-y: {(player.path[1]?.[1] || player.path[0][1]) - player.path[0][1]}%; --duration: {player.animationDuration}s; animation-delay: {player.animationDelay}s;"
-                ></div>
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  style="left: {player.path[0][0]}%; top: {player.path[0][1]}%; --duration: {player.animationDuration}s; animation-delay: {player.animationDelay}s; --jersey: {player.team === 'home' ? 'var(--team-primary)' : 'var(--opponent-primary)'}; --stripe: {player.team === 'home' ? 'var(--team-secondary)' : 'var(--opponent-secondary)'};"
+                >
+                  {#if player.isGoalie}
+                    <!-- Goalie - wider stance, bigger pads -->
+                    <g class="frame skate1">
+                      <!-- Helmet (round with cage) -->
+                      <rect x="8" y="1" width="8" height="6" fill="var(--jersey)"/>
+                      <rect x="6" y="3" width="2" height="3" fill="var(--jersey)"/>
+                      <rect x="7" y="4" width="3" height="2" fill="#f5d0c5"/>
+                      <!-- Body/Jersey with stripes -->
+                      <rect x="6" y="7" width="10" height="6" fill="var(--jersey)"/>
+                      <rect x="6" y="8" width="10" height="1" fill="var(--stripe)"/>
+                      <rect x="6" y="10" width="10" height="1" fill="var(--stripe)"/>
+                      <!-- Blocker arm -->
+                      <rect x="15" y="8" width="4" height="3" fill="var(--jersey)"/>
+                      <rect x="18" y="7" width="3" height="5" fill="#f0f0f0"/>
+                      <!-- Glove arm -->
+                      <rect x="3" y="8" width="4" height="3" fill="var(--jersey)"/>
+                      <rect x="1" y="7" width="3" height="4" fill="#8B4513"/>
+                      <!-- Pads -->
+                      <rect x="4" y="13" width="6" height="8" fill="#f0f0f0"/>
+                      <rect x="12" y="13" width="6" height="8" fill="#f0f0f0"/>
+                      <rect x="5" y="14" width="2" height="6" fill="var(--jersey)"/>
+                      <rect x="15" y="14" width="2" height="6" fill="var(--jersey)"/>
+                      <!-- Skates -->
+                      <rect x="3" y="21" width="7" height="2" fill="#222"/>
+                      <rect x="12" y="21" width="7" height="2" fill="#222"/>
+                      <!-- Stick -->
+                      <rect x="16" y="11" width="1" height="10" fill="#8d6e63"/>
+                      <rect x="16" y="20" width="4" height="2" fill="#8d6e63"/>
+                    </g>
+                    <g class="frame skate2">
+                      <!-- Same as frame1 but slightly shifted -->
+                      <rect x="8" y="1" width="8" height="6" fill="var(--jersey)"/>
+                      <rect x="6" y="3" width="2" height="3" fill="var(--jersey)"/>
+                      <rect x="7" y="4" width="3" height="2" fill="#f5d0c5"/>
+                      <rect x="6" y="7" width="10" height="6" fill="var(--jersey)"/>
+                      <rect x="6" y="8" width="10" height="1" fill="var(--stripe)"/>
+                      <rect x="6" y="10" width="10" height="1" fill="var(--stripe)"/>
+                      <rect x="15" y="8" width="4" height="3" fill="var(--jersey)"/>
+                      <rect x="18" y="7" width="3" height="5" fill="#f0f0f0"/>
+                      <rect x="3" y="8" width="4" height="3" fill="var(--jersey)"/>
+                      <rect x="1" y="7" width="3" height="4" fill="#8B4513"/>
+                      <!-- Pads shifted -->
+                      <rect x="5" y="13" width="6" height="8" fill="#f0f0f0"/>
+                      <rect x="11" y="13" width="6" height="8" fill="#f0f0f0"/>
+                      <rect x="6" y="14" width="2" height="6" fill="var(--jersey)"/>
+                      <rect x="14" y="14" width="2" height="6" fill="var(--jersey)"/>
+                      <rect x="4" y="21" width="7" height="2" fill="#222"/>
+                      <rect x="11" y="21" width="7" height="2" fill="#222"/>
+                      <rect x="16" y="11" width="1" height="10" fill="#8d6e63"/>
+                      <rect x="16" y="20" width="4" height="2" fill="#8d6e63"/>
+                    </g>
+                  {:else}
+                    <!-- Skater - NES Ice Hockey side view style -->
+                    <!-- Frame 1: Back leg extended -->
+                    <g class="frame skate1">
+                      <!-- Helmet (round dome with visor) -->
+                      <rect x="9" y="1" width="7" height="5" fill="var(--jersey)"/>
+                      <rect x="8" y="2" width="2" height="4" fill="var(--jersey)"/>
+                      <rect x="6" y="3" width="3" height="2" fill="var(--jersey)"/>
+                      <!-- Face (side view) -->
+                      <rect x="7" y="4" width="3" height="3" fill="#f5d0c5"/>
+                      <!-- Eye -->
+                      <rect x="7" y="5" width="1" height="1" fill="#000"/>
+                      <!-- Body/Jersey - leaning forward -->
+                      <rect x="8" y="7" width="8" height="6" fill="var(--jersey)"/>
+                      <!-- Horizontal stripes on jersey -->
+                      <rect x="8" y="8" width="8" height="1" fill="var(--stripe)"/>
+                      <rect x="8" y="10" width="8" height="1" fill="var(--stripe)"/>
+                      <!-- Arm holding stick -->
+                      <rect x="14" y="8" width="4" height="3" fill="var(--jersey)"/>
+                      <rect x="17" y="10" width="2" height="2" fill="#f5d0c5"/>
+                      <!-- Pants -->
+                      <rect x="9" y="13" width="6" height="4" fill="#1a1a1a"/>
+                      <!-- Back leg (extended) -->
+                      <rect x="6" y="16" width="3" height="4" fill="#1a1a1a"/>
+                      <rect x="4" y="19" width="4" height="2" fill="#222"/>
+                      <rect x="3" y="21" width="5" height="1" fill="#666"/>
+                      <!-- Front leg (bent) -->
+                      <rect x="12" y="16" width="3" height="3" fill="#1a1a1a"/>
+                      <rect x="13" y="19" width="3" height="2" fill="#222"/>
+                      <rect x="13" y="21" width="4" height="1" fill="#666"/>
+                      <!-- Stick (diagonal) -->
+                      <rect x="17" y="11" width="1" height="2" fill="#8d6e63"/>
+                      <rect x="18" y="12" width="1" height="2" fill="#8d6e63"/>
+                      <rect x="19" y="13" width="1" height="3" fill="#8d6e63"/>
+                      <rect x="20" y="15" width="1" height="3" fill="#8d6e63"/>
+                      <rect x="19" y="17" width="3" height="2" fill="#8d6e63"/>
+                    </g>
+                    <!-- Frame 2: Legs crossed/together -->
+                    <g class="frame skate2">
+                      <!-- Helmet -->
+                      <rect x="9" y="1" width="7" height="5" fill="var(--jersey)"/>
+                      <rect x="8" y="2" width="2" height="4" fill="var(--jersey)"/>
+                      <rect x="6" y="3" width="3" height="2" fill="var(--jersey)"/>
+                      <!-- Face -->
+                      <rect x="7" y="4" width="3" height="3" fill="#f5d0c5"/>
+                      <rect x="7" y="5" width="1" height="1" fill="#000"/>
+                      <!-- Body -->
+                      <rect x="8" y="7" width="8" height="6" fill="var(--jersey)"/>
+                      <rect x="8" y="8" width="8" height="1" fill="var(--stripe)"/>
+                      <rect x="8" y="10" width="8" height="1" fill="var(--stripe)"/>
+                      <!-- Arm -->
+                      <rect x="14" y="8" width="4" height="3" fill="var(--jersey)"/>
+                      <rect x="17" y="10" width="2" height="2" fill="#f5d0c5"/>
+                      <!-- Pants -->
+                      <rect x="9" y="13" width="6" height="4" fill="#1a1a1a"/>
+                      <!-- Legs together (gliding) -->
+                      <rect x="9" y="16" width="3" height="4" fill="#1a1a1a"/>
+                      <rect x="11" y="16" width="3" height="4" fill="#1a1a1a"/>
+                      <rect x="8" y="19" width="4" height="2" fill="#222"/>
+                      <rect x="11" y="19" width="4" height="2" fill="#222"/>
+                      <rect x="7" y="21" width="5" height="1" fill="#666"/>
+                      <rect x="11" y="21" width="5" height="1" fill="#666"/>
+                      <!-- Stick -->
+                      <rect x="17" y="11" width="1" height="2" fill="#8d6e63"/>
+                      <rect x="18" y="12" width="1" height="2" fill="#8d6e63"/>
+                      <rect x="19" y="13" width="1" height="3" fill="#8d6e63"/>
+                      <rect x="20" y="15" width="1" height="3" fill="#8d6e63"/>
+                      <rect x="19" y="17" width="3" height="2" fill="#8d6e63"/>
+                    </g>
+                  {/if}
+                </svg>
               {/each}
 
-              <!-- Referee (only during match) -->
+              <!-- Referee (only during match) - NES style -->
               {#if rinkMode === 'match'}
-                <div class="pixel-referee" style="left: 50%; top: 30%;"></div>
+                <svg
+                  class="pixel-referee {skateTick === 0 ? 'skate1' : 'skate2'}"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  style="left: 50%; top: 30%;"
+                >
+                  <g class="frame skate1">
+                    <!-- Helmet (black) -->
+                    <rect x="9" y="1" width="7" height="5" fill="#222"/>
+                    <rect x="8" y="2" width="2" height="4" fill="#222"/>
+                    <rect x="6" y="3" width="3" height="2" fill="#222"/>
+                    <!-- Face -->
+                    <rect x="7" y="4" width="3" height="3" fill="#f5d0c5"/>
+                    <rect x="7" y="5" width="1" height="1" fill="#000"/>
+                    <!-- Striped jersey -->
+                    <rect x="8" y="7" width="8" height="6" fill="#000"/>
+                    <rect x="8" y="8" width="8" height="1" fill="#fff"/>
+                    <rect x="8" y="10" width="8" height="1" fill="#fff"/>
+                    <rect x="8" y="12" width="8" height="1" fill="#fff"/>
+                    <!-- Arm -->
+                    <rect x="14" y="8" width="3" height="3" fill="#000"/>
+                    <!-- Pants -->
+                    <rect x="9" y="13" width="6" height="4" fill="#1a1a1a"/>
+                    <!-- Legs -->
+                    <rect x="6" y="16" width="3" height="4" fill="#1a1a1a"/>
+                    <rect x="4" y="19" width="4" height="2" fill="#222"/>
+                    <rect x="3" y="21" width="5" height="1" fill="#666"/>
+                    <rect x="12" y="16" width="3" height="3" fill="#1a1a1a"/>
+                    <rect x="13" y="19" width="3" height="2" fill="#222"/>
+                    <rect x="13" y="21" width="4" height="1" fill="#666"/>
+                  </g>
+                  <g class="frame skate2">
+                    <rect x="9" y="1" width="7" height="5" fill="#222"/>
+                    <rect x="8" y="2" width="2" height="4" fill="#222"/>
+                    <rect x="6" y="3" width="3" height="2" fill="#222"/>
+                    <rect x="7" y="4" width="3" height="3" fill="#f5d0c5"/>
+                    <rect x="7" y="5" width="1" height="1" fill="#000"/>
+                    <rect x="8" y="7" width="8" height="6" fill="#000"/>
+                    <rect x="8" y="8" width="8" height="1" fill="#fff"/>
+                    <rect x="8" y="10" width="8" height="1" fill="#fff"/>
+                    <rect x="8" y="12" width="8" height="1" fill="#fff"/>
+                    <rect x="14" y="8" width="3" height="3" fill="#000"/>
+                    <rect x="9" y="13" width="6" height="4" fill="#1a1a1a"/>
+                    <rect x="9" y="16" width="3" height="4" fill="#1a1a1a"/>
+                    <rect x="11" y="16" width="3" height="4" fill="#1a1a1a"/>
+                    <rect x="8" y="19" width="4" height="2" fill="#222"/>
+                    <rect x="11" y="19" width="4" height="2" fill="#222"/>
+                    <rect x="7" y="21" width="5" height="1" fill="#666"/>
+                    <rect x="11" y="21" width="5" height="1" fill="#666"/>
+                  </g>
+                </svg>
               {/if}
 
               <!-- Coach (only during training) -->
               {#if rinkMode === 'training' && !isPlayingMatch}
-                <div class="pixel-coach" style="left: 88%; top: 85%;"></div>
+                <svg
+                  class="pixel-coach"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  style="left: 88%; top: 85%;"
+                >
+                  <!-- Cap -->
+                  <rect x="9" y="1" width="7" height="3" fill="var(--team-primary)"/>
+                  <rect x="6" y="3" width="4" height="2" fill="var(--team-primary)"/>
+                  <!-- Face -->
+                  <rect x="7" y="4" width="5" height="4" fill="#f5d0c5"/>
+                  <rect x="8" y="5" width="1" height="1" fill="#000"/>
+                  <!-- Jacket -->
+                  <rect x="7" y="8" width="9" height="7" fill="#1a1a1a"/>
+                  <rect x="9" y="9" width="5" height="3" fill="var(--team-primary)"/>
+                  <!-- Arms -->
+                  <rect x="5" y="9" width="3" height="4" fill="#1a1a1a"/>
+                  <rect x="15" y="9" width="3" height="4" fill="#1a1a1a"/>
+                  <!-- Clipboard -->
+                  <rect x="17" y="10" width="4" height="5" fill="#d4a574"/>
+                  <rect x="18" y="11" width="2" height="3" fill="#fff"/>
+                  <!-- Pants -->
+                  <rect x="8" y="15" width="7" height="4" fill="#1a1a1a"/>
+                  <!-- Legs -->
+                  <rect x="8" y="19" width="3" height="3" fill="#1a1a1a"/>
+                  <rect x="12" y="19" width="3" height="3" fill="#1a1a1a"/>
+                  <!-- Shoes -->
+                  <rect x="7" y="22" width="4" height="1" fill="#333"/>
+                  <rect x="12" y="22" width="4" height="1" fill="#333"/>
+                </svg>
               {/if}
 
               <!-- Puck with path animation -->
@@ -2450,73 +2659,45 @@
     fill: #d8ecff;
   }
 
-  /* Pixel Art Players - NES 8-bit style, scaled for larger rink */
+  /* SVG Pixel Art Players - NES Ice Hockey style */
   .pixel-player {
     position: absolute;
-    width: 24px;
-    height: 32px;
-    image-rendering: pixelated;
+    width: 36px;
+    height: 36px;
     transform: translate(-50%, -50%);
     z-index: 10;
-    /* CSS-generated pixel sprite - scaled 1.5x */
-    background:
-      /* Head (skin) */
-      linear-gradient(#f5d0c5, #f5d0c5) 6px 0 / 12px 7px,
-      /* Jersey body */
-      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 3px 7px / 18px 12px,
-      /* Jersey stripe */
-      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 3px 13px / 18px 3px,
-      /* Pants */
-      linear-gradient(#333, #333) 6px 19px / 12px 7px,
-      /* Left leg */
-      linear-gradient(#222, #222) 6px 26px / 5px 6px,
-      /* Right leg */
-      linear-gradient(#222, #222) 13px 26px / 5px 6px;
-    background-repeat: no-repeat;
+    shape-rendering: crispEdges;
+    image-rendering: pixelated;
     animation: skate var(--duration, 4s) ease-in-out infinite;
-    animation-delay: var(--animation-delay, 0s);
-  }
-
-  .pixel-player.home {
-    --jersey-primary: var(--team-primary, #dc2626);
-    --jersey-secondary: var(--team-secondary, #fff);
-  }
-
-  .pixel-player.away {
-    --jersey-primary: var(--opponent-primary, #1e40af);
-    --jersey-secondary: var(--opponent-secondary, #fbbf24);
   }
 
   .pixel-player.goalie {
-    width: 30px;
-    height: 38px;
-    /* Goalie with pads - scaled 1.5x */
-    background:
-      /* Head */
-      linear-gradient(#f5d0c5, #f5d0c5) 9px 0 / 12px 7px,
-      /* Mask */
-      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 9px 0 / 12px 4px,
-      /* Jersey */
-      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 3px 7px / 24px 14px,
-      /* Stripe */
-      linear-gradient(var(--jersey-secondary), var(--jersey-secondary)) 3px 13px / 24px 3px,
-      /* Pads */
-      linear-gradient(#f0f0f0, #f0f0f0) 3px 21px / 24px 17px,
-      /* Pad stripes */
-      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 6px 24px / 3px 11px,
-      linear-gradient(var(--jersey-primary), var(--jersey-primary)) 21px 24px / 3px 11px;
-    background-repeat: no-repeat;
+    width: 42px;
+    height: 42px;
     animation: goalie-sway 2s ease-in-out infinite;
+  }
+
+  /* Frame visibility - NES-style animation */
+  .pixel-player .frame,
+  .pixel-referee .frame {
+    display: none;
+  }
+
+  .pixel-player.skate1 .frame.skate1,
+  .pixel-player.skate2 .frame.skate2,
+  .pixel-referee.skate1 .frame.skate1,
+  .pixel-referee.skate2 .frame.skate2 {
+    display: block;
   }
 
   /* Training skating - wide movement across the rink */
   @keyframes skate {
     0% { transform: translate(-50%, -50%) translate(0, 0); }
-    15% { transform: translate(-50%, -50%) translate(25%, 10%) translateY(-2px); }
+    15% { transform: translate(-50%, -50%) translate(25%, 10%); }
     30% { transform: translate(-50%, -50%) translate(45%, 5%); }
-    45% { transform: translate(-50%, -50%) translate(30%, 20%) translateY(-2px); }
+    45% { transform: translate(-50%, -50%) translate(30%, 20%); }
     60% { transform: translate(-50%, -50%) translate(10%, 15%); }
-    75% { transform: translate(-50%, -50%) translate(-5%, 5%) translateY(-2px); }
+    75% { transform: translate(-50%, -50%) translate(-5%, 5%); }
     90% { transform: translate(-50%, -50%) translate(5%, -5%); }
     100% { transform: translate(-50%, -50%) translate(0, 0); }
   }
@@ -2528,13 +2709,13 @@
   /* Match skating - faster, more aggressive movement */
   @keyframes skate-fast {
     0% { transform: translate(-50%, -50%) translate(0, 0); }
-    12% { transform: translate(-50%, -50%) translate(20%, 15%) translateY(-3px); }
+    12% { transform: translate(-50%, -50%) translate(20%, 15%); }
     25% { transform: translate(-50%, -50%) translate(35%, 5%); }
-    37% { transform: translate(-50%, -50%) translate(25%, -10%) translateY(-3px); }
+    37% { transform: translate(-50%, -50%) translate(25%, -10%); }
     50% { transform: translate(-50%, -50%) translate(10%, 5%); }
-    62% { transform: translate(-50%, -50%) translate(-5%, 15%) translateY(-3px); }
+    62% { transform: translate(-50%, -50%) translate(-5%, 15%); }
     75% { transform: translate(-50%, -50%) translate(5%, 20%); }
-    87% { transform: translate(-50%, -50%) translate(15%, 10%) translateY(-3px); }
+    87% { transform: translate(-50%, -50%) translate(15%, 10%); }
     100% { transform: translate(-50%, -50%) translate(0, 0); }
   }
 
@@ -2546,64 +2727,36 @@
     75% { transform: translate(-50%, -50%) translate(-3px, -3px); }
   }
 
-  /* Referee - black/white striped - scaled 1.5x */
+  /* Referee SVG */
   .pixel-referee {
     position: absolute;
-    width: 21px;
-    height: 30px;
-    image-rendering: pixelated;
+    width: 36px;
+    height: 36px;
     transform: translate(-50%, -50%);
     z-index: 9;
-    background:
-      /* Head */
-      linear-gradient(#f5d0c5, #f5d0c5) 5px 0 / 12px 6px,
-      /* Striped jersey */
-      repeating-linear-gradient(
-        0deg,
-        #000 0px, #000 3px,
-        #fff 3px, #fff 6px
-      ) 2px 6px / 18px 12px,
-      /* Black pants */
-      linear-gradient(#1a1a1a, #1a1a1a) 5px 18px / 12px 6px,
-      /* Legs */
-      linear-gradient(#333, #333) 5px 24px / 5px 6px,
-      linear-gradient(#333, #333) 12px 24px / 5px 6px;
-    background-repeat: no-repeat;
+    shape-rendering: crispEdges;
+    image-rendering: pixelated;
     animation: referee-follow 4s ease-in-out infinite;
   }
 
   /* Referee follows the play action */
   @keyframes referee-follow {
     0%, 100% { transform: translate(-50%, -50%) translate(0, 0); }
-    20% { transform: translate(-50%, -50%) translate(15%, 8%) translateY(-1px); }
+    20% { transform: translate(-50%, -50%) translate(15%, 8%); }
     40% { transform: translate(-50%, -50%) translate(25%, 12%); }
-    60% { transform: translate(-50%, -50%) translate(10%, 18%) translateY(-1px); }
+    60% { transform: translate(-50%, -50%) translate(10%, 18%); }
     80% { transform: translate(-50%, -50%) translate(-5%, 10%); }
   }
 
-  /* Coach - stands near bench and gestures - scaled 1.5x */
+  /* Coach SVG */
   .pixel-coach {
     position: absolute;
-    width: 24px;
+    width: 36px;
     height: 36px;
+    shape-rendering: crispEdges;
     image-rendering: pixelated;
     transform: translate(-50%, -50%);
     z-index: 8;
-    background:
-      /* Head */
-      linear-gradient(#f5d0c5, #f5d0c5) 6px 0 / 12px 7px,
-      /* Cap */
-      linear-gradient(var(--team-primary, #dc2626), var(--team-primary, #dc2626)) 3px 0 / 18px 4px,
-      /* Jacket */
-      linear-gradient(#2d3748, #2d3748) 3px 7px / 18px 15px,
-      /* Team logo on jacket */
-      linear-gradient(var(--team-primary, #dc2626), var(--team-primary, #dc2626)) 8px 12px / 9px 6px,
-      /* Pants */
-      linear-gradient(#1a1a1a, #1a1a1a) 6px 22px / 12px 7px,
-      /* Legs */
-      linear-gradient(#222, #222) 6px 29px / 5px 6px,
-      linear-gradient(#222, #222) 13px 29px / 5px 6px;
-    background-repeat: no-repeat;
     animation: coach-gesture 4s ease-in-out infinite;
   }
 
