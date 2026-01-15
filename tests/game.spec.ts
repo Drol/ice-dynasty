@@ -55,16 +55,26 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should show training minutes increasing passively', async ({ page }) => {
-      // Get initial value from header
+      // Set speed to 100x to see a significant change
+      await page.getByRole('button', { name: '100x' }).click();
+
+      // Get initial value from header (parses formatted numbers like "1.5K" → 1500)
       const getMinutes = async () => {
-        const text = await page.locator('.header-resource.training .header-resource-value').textContent();
-        return parseFloat(text?.replace(/[^\d.KMB]/g, '').replace('K', '000').replace('M', '000000') || '0');
+        const text = await page.locator('.header-resource.training .header-resource-value').textContent() || '0';
+        const match = text.match(/([\d.]+)([KMB])?/);
+        if (!match) return 0;
+        const num = parseFloat(match[1]);
+        const suffix = match[2];
+        if (suffix === 'K') return num * 1000;
+        if (suffix === 'M') return num * 1000000;
+        if (suffix === 'B') return num * 1000000000;
+        return num;
       };
 
       const initialMinutes = await getMinutes();
 
-      // Wait a bit for passive training
-      await page.waitForTimeout(2000);
+      // Wait a bit for passive training (at 100x speed: 100/s)
+      await page.waitForTimeout(1500);
 
       const newMinutes = await getMinutes();
       expect(newMinutes).toBeGreaterThan(initialMinutes);

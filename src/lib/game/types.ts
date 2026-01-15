@@ -884,7 +884,7 @@ export const INITIAL_GAME_STATE: GameState = {
     reputation: 0,
   },
   training: {
-    minutes: 0,
+    minutes: 1500, // Start halfway to first match
     boostUntil: 0,
   },
   morale: {

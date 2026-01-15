@@ -430,7 +430,7 @@ function createGameStore() {
           },
         },
         training: {
-          minutes: 0,
+          minutes: 1500, // Start halfway to first match
           boostUntil: 0,
         },
         currentTactic: 'balanced',
