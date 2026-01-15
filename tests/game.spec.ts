@@ -112,11 +112,11 @@ test.describe('Ice Dynasty Game', () => {
       // Click Balanced tactic button to start match
       await page.getByRole('button', { name: /Balanced/i }).click();
 
-      // Wait for match animation (~5s) + result display in scoreboard
-      await page.waitForTimeout(6000);
+      // Wait for match animation + result (at 1000x speed, this is very fast)
+      await page.waitForTimeout(100);
 
-      // Should show WIN! or LOSS in the NES-style scoreboard
-      await expect(page.locator('.scoreboard-result')).toBeVisible({ timeout: 10000 });
+      // Record should have updated from 0W - 0L
+      await expect(page.locator('text=/[1-9]\\d*W|[1-9]\\d*L/')).toBeVisible({ timeout: 5000 });
     });
 
     test('should update record after match', async ({ page }) => {
@@ -176,20 +176,20 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should show morale only on Dashboard tab', async ({ page }) => {
-      // Morale should be visible on Dashboard
-      await expect(page.locator('text=Team Morale')).toBeVisible();
+      // Morale should be visible on Dashboard (compact morale panel)
+      await expect(page.locator('.morale-panel-compact')).toBeVisible();
 
       // Switch to Upgrades tab
       await page.getByRole('button', { name: 'Upgrades' }).click();
 
       // Morale should NOT be visible on Upgrades tab
-      await expect(page.locator('text=Team Morale')).not.toBeVisible();
+      await expect(page.locator('.morale-panel-compact')).not.toBeVisible();
 
       // Switch back to Dashboard
       await page.getByRole('button', { name: 'Dashboard' }).click();
 
       // Morale should be visible again
-      await expect(page.locator('text=Team Morale')).toBeVisible();
+      await expect(page.locator('.morale-panel-compact')).toBeVisible();
     });
 
     test('should show morale at level 0 initially', async ({ page }) => {
@@ -198,7 +198,7 @@ test.describe('Ice Dynasty Game', () => {
     });
 
     test('should have Boost Morale disabled without money', async ({ page }) => {
-      await expect(page.getByRole('button', { name: /Boost Morale/i })).toBeDisabled();
+      await expect(page.locator('.morale-boost-btn-compact')).toBeDisabled();
     });
 
     test('should enable Boost Morale after earning money', async ({ page }) => {
@@ -212,7 +212,7 @@ test.describe('Ice Dynasty Game', () => {
       await page.waitForTimeout(5000); // Wait for match
 
       // Should have enough money now
-      await expect(page.getByRole('button', { name: /Boost Morale/i })).toBeEnabled();
+      await expect(page.locator('.morale-boost-btn-compact')).toBeEnabled();
     });
 
     test('should increase morale level when boosted', async ({ page }) => {
@@ -231,7 +231,7 @@ test.describe('Ice Dynasty Game', () => {
         await page.waitForTimeout(4000); // Wait for more training
       }
 
-      await page.getByRole('button', { name: /Boost Morale/i }).click();
+      await page.locator('.morale-boost-btn-compact').click();
 
       await expect(page.locator('text=1/100')).toBeVisible();
       await expect(page.locator('text=1.05x')).toBeVisible();

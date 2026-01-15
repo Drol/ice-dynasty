@@ -128,3 +128,4 @@
     {/each}
   </div>
 </section>
+<!-- Styles are in app.css (SHARED TAB COMPONENT STYLES) -->

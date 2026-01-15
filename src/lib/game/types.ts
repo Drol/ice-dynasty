@@ -27,6 +27,7 @@ export type MatchTactic = 'offensive' | 'balanced' | 'defensive';
  */
 export interface Training {
   minutes: number;  // Total training minutes
+  boostUntil: number;  // Timestamp when boost ends (0 = no boost)
 }
 
 export interface PlayerStats {
@@ -108,13 +109,14 @@ export interface Achievement {
  * Challenge restriction types for special seasons
  */
 export type ChallengeRestrictionType =
-  | 'winChanceCap'    // C1: Max win chance capped
-  | 'noMoney'         // C2: No money from matches or passive
-  | 'trainingDecay'   // C3: Training decays over time
-  | 'forcedTactic'    // C4/C5: Locked to specific tactic
-  | 'noUpgrades'      // C6: Can't buy season upgrades
-  | 'timeLimit'       // C7: Must complete within time
-  | 'highGoal';       // C8: Higher win requirement
+  | 'winChanceCap'        // Legacy: Max win chance capped
+  | 'winChanceReduction'  // C1: Flat win chance reduction
+  | 'noMoney'             // C2: No money from matches or passive
+  | 'trainingDecay'       // C3: Training decays over time
+  | 'forcedTactic'        // C4/C5: Locked to specific tactic
+  | 'noUpgrades'          // C6: Can't buy season upgrades
+  | 'timeLimit'           // C7: Must complete within time
+  | 'highGoal';           // C8: Higher win requirement
 
 export interface ChallengeRestriction {
   type: ChallengeRestrictionType;
@@ -245,7 +247,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
   {
     id: 'better_skates',
     name: 'Better Skates',
-    description: '+30 training per click',
+    description: '+5s boost duration per click',
     level: 0,
     maxLevel: 50,
     baseCost: 50,
@@ -267,7 +269,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
   {
     id: 'hockey_sticks',
     name: 'Better Sticks',
-    description: '+60 training per click',
+    description: '+10s boost duration per click',
     level: 0,
     maxLevel: 40,
     baseCost: 100,
@@ -326,7 +328,7 @@ export const INITIAL_UPGRADES: Upgrade[] = [
   {
     id: 'equipment_locker',
     name: 'Equipment Locker',
-    description: 'Multiplies click power by 1.1x',
+    description: 'Multiplies boost duration by 1.1x',
     level: 0,
     maxLevel: 15,
     baseCost: 2000,
@@ -637,17 +639,17 @@ export const INITIAL_CHALLENGES: Challenge[] = [
   {
     id: 'rookie_season',
     name: 'Rookie Season',
-    description: 'Prove you can win even when the odds are against you.',
+    description: 'Prove you can win even with reduced odds.',
     maxLevel: 5,
     currentLevel: 0,
-    baseRestriction: { type: 'winChanceCap', value: 0.5 },  // L1: 50%, L2: 45%, L3: 40%, L4: 35%, L5: 30%
+    baseRestriction: { type: 'winChanceReduction', value: 0.1 },  // L1: -10%, L2: -15%, L3: -20%, L4: -25%, L5: -30%
     baseGoalWins: 10,
     baseReward: {
       type: 'winChance',
       value: 0.01,  // +1% per level (total +7.5% at L5)
       description: '+1% permanent win chance',
     },
-    difficultyScaling: [1.0, 1.11, 1.25, 1.43, 1.67],  // 50%→45%→40%→35%→30%
+    difficultyScaling: [1.0, 1.5, 2.0, 2.5, 3.0],  // -10%→-15%→-20%→-25%→-30%
     rewardScaling: DEFAULT_REWARD_SCALING,
     active: false,
     attemptingLevel: 0,
@@ -841,7 +843,7 @@ export const INITIAL_REPUTATION_UPGRADES: ReputationUpgrade[] = [
   {
     id: 'training_methods',
     name: 'Training Methods',
-    description: '+300% click power',
+    description: '+300% boost duration',
     cost: 30,
     purchased: false,
     effect: { type: 'clickPower', value: 3.0 },
@@ -883,6 +885,7 @@ export const INITIAL_GAME_STATE: GameState = {
   },
   training: {
     minutes: 0,
+    boostUntil: 0,
   },
   morale: {
     level: 0,

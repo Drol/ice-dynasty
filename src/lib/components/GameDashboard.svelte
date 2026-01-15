@@ -274,6 +274,8 @@
     switch (type) {
       case 'winChanceCap':
         return `${Math.round((value as number) * 100)}% win cap`;
+      case 'winChanceReduction':
+        return `-${Math.round((value as number) * 100)}% win chance`;
       case 'noMoney':
         return 'No money';
       case 'trainingDecay':

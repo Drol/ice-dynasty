@@ -31,6 +31,13 @@ export const MORALE_COST_MULTIPLIER = 1.5;
 export const MORALE_EFFECT_PER_LEVEL = 0.05;
 
 /**
+ * Training boost constants (click to boost mechanic)
+ */
+export const BOOST_DURATION_MS = 5000;  // 5 seconds per click
+export const BOOST_MAX_DURATION_MS = 15000;  // Max 15 seconds stacked
+export const BOOST_MULTIPLIER = 3;  // 3x training rate during boost
+
+/**
  * Tactic modifiers for matches
  */
 export const TACTIC_MODIFIERS: Record<MatchTactic, {
@@ -371,6 +378,10 @@ export function getChallengeRestriction(challenge: Challenge, level: number): Ch
     case 'winChanceCap':
       // Lower cap = harder (0.50 → 0.45 → 0.40 → 0.35 → 0.30)
       scaledValue = baseValue - (scaling - 1) * 0.05;
+      break;
+    case 'winChanceReduction':
+      // Flat reduction increases with level (10% → 15% → 20% → 25% → 30%)
+      scaledValue = baseValue * scaling;
       break;
     case 'noMoney':
       // Additional training penalty at higher levels (0 → 25% → 50% → 75% → 100%)
