@@ -33,8 +33,8 @@ export const MORALE_EFFECT_PER_LEVEL = 0.05;
 /**
  * Training boost constants (click to boost mechanic)
  */
-export const BOOST_DURATION_MS = 5000;  // 5 seconds per click
-export const BOOST_MAX_DURATION_MS = 15000;  // Max 15 seconds stacked
+export const BOOST_DURATION_MS = 5000;  // 5 seconds per click (base)
+export const BOOST_MAX_CLICKS = 3;  // Max 3 clicks worth of boost can stack
 export const BOOST_MULTIPLIER = 3;  // 3x training rate during boost
 
 /**

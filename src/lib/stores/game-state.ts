@@ -23,7 +23,7 @@ import {
   getChallengeRestriction,
   getChallengeGoalWins,
   BOOST_DURATION_MS,
-  BOOST_MAX_DURATION_MS,
+  BOOST_MAX_CLICKS,
   BOOST_MULTIPLIER,
 } from '$lib/game/formulas';
 
@@ -576,11 +576,14 @@ function createGameStore() {
         // Click power scales boost duration: 30 power = 5s, 60 power = 10s, etc.
         const boostDurationFromClick = BOOST_DURATION_MS * (clickPower / 30);
 
-        // Calculate new boost end time (add scaled duration, cap at max)
+        // Max boost = 3 clicks worth (scales with upgrades!)
+        const maxBoostDuration = BOOST_MAX_CLICKS * boostDurationFromClick;
+
+        // Calculate new boost end time (add scaled duration, cap at max clicks)
         const currentBoostRemaining = Math.max(0, state.training.boostUntil - now);
         const newBoostDuration = Math.min(
           currentBoostRemaining + boostDurationFromClick,
-          BOOST_MAX_DURATION_MS
+          maxBoostDuration
         );
         const newBoostUntil = now + newBoostDuration;
 

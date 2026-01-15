@@ -549,7 +549,9 @@
           <svg class="header-resource-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
           </svg>
-          <span class="header-resource-value">{formatNumber(game.resources.fans)}</span>
+          <div class="header-resource-content">
+            <span class="header-resource-value">{formatNumber(game.resources.fans)}</span>
+          </div>
         </div>
 
         <div class="header-resource money">
@@ -1465,6 +1467,8 @@
     flex-direction: column;
     align-items: flex-start;
     line-height: 1.1;
+    min-height: 28px; /* Consistent height even without rate */
+    justify-content: center;
   }
 
   .header-resource-value {
@@ -2478,6 +2482,8 @@
     overflow: hidden;
     transition: transform 0.1s, box-shadow 0.2s;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    background: var(--arena-deep); /* Match arena background to hide corners */
+    border-radius: 12px; /* Match SVG rounded corners */
   }
 
   .rink-svg {
