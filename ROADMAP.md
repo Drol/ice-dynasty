@@ -204,3 +204,35 @@ Alla achievements har dolda krav. Svåra/meningsfulla ger permanenta bonusar.
 - **4 Action buttons:** Training + 3 match tactics (Offensive/Balanced/Defensive)
 - **Borttaget:** Separat "Play Match" knapp - taktik-val startar direkt matchen
 - **Match animation:** 2.5s animation innan resultat visas
+
+### 2026-01-15 - NES Ice Hockey Style & Polish
+- **NES Ice Hockey sprites:** Sidovy med hjälm, visir, horisontella ränder, diagonal klubba
+- **Målvakter:** Större sprites med pads, blocker, handske - placerade nära målen (7%/93%)
+- **Träningsläge förbättrat:**
+  - 12 spelare (5v5 + 2 målvakter)
+  - Lagets två färger används (primär vs sekundär trupp)
+  - Scoreboard visar träningsrate istället för matchinfo
+- **Puck-animation:** Rör sig över hela isen mellan spelare
+- **Knappgruppering:** "Practice" och "Play Match" separerade med olika ramar och etiketter
+- **Matchklocka:** 5s nedräkning som respekterar dev speed
+- **Victory/Defeat:** Fullskärmsmeddelande vid matchslut (guld konfetti vid vinst, röd text vid förlust)
+- **Training boost:** 1.2s animation när man klickar (spelare rusar över isen)
+
+---
+
+## Backlog
+
+### Prio 1 - Nästa att implementera
+| Idé | Beskrivning |
+|-----|-------------|
+| **Training Boost Rework** | Klick på "Practice" boostar training/s under en viss tid istället för att ge training direkt. Mer idle-game-känsla. |
+
+### Prio 2 - Bra idéer
+| Idé | Beskrivning |
+|-----|-------------|
+| *Tom* | |
+
+### Prio 3 - Kanske senare
+| Idé | Beskrivning |
+|-----|-------------|
+| *Tom* | |

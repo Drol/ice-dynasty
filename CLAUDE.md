@@ -127,6 +127,16 @@ test('should do something', async ({ page }) => {
 });
 ```
 
+## Roadmap Maintenance
+
+När features implementeras eller planer ändras, uppdatera alltid `ROADMAP.md`:
+- Markera färdiga features med ✅
+- Lägg till nya design decisions med datum
+- Håll "Design Decisions Log" uppdaterad
+- Lägg till nya idéer i "Backlog" sektionen
+
+---
+
 ## Git Workflow
 
 ### Commit Policy
