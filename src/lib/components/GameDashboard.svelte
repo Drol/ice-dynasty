@@ -358,10 +358,10 @@
   // Training: Practice scrimmage - same team split into primary/secondary color squads
   // 'home' = primary color squad, 'away' = secondary color squad (swapped jersey colors)
   const trainingPlayers: RinkPlayer[] = [
-    // Primary squad goalie (left side)
-    { id: 1, team: 'home', isGoalie: true, path: [[12, 40], [12, 55], [14, 50], [12, 45], [12, 55]], animationDuration: 3.5, animationDelay: 0 },
-    // Secondary squad goalie (right side)
-    { id: 2, team: 'away', isGoalie: true, path: [[88, 55], [88, 40], [86, 50], [88, 55], [88, 45]], animationDuration: 3.5, animationDelay: 0.2 },
+    // Primary squad goalie (left side - near goal crease)
+    { id: 1, team: 'home', isGoalie: true, path: [[7, 45], [7, 55], [8, 50], [7, 48], [7, 52]], animationDuration: 3.5, animationDelay: 0 },
+    // Secondary squad goalie (right side - near goal crease)
+    { id: 2, team: 'away', isGoalie: true, path: [[93, 55], [93, 45], [92, 50], [93, 52], [93, 48]], animationDuration: 3.5, animationDelay: 0.2 },
     // Primary squad forwards
     { id: 3, team: 'home', path: [[25, 25], [50, 30], [75, 35], [60, 50], [35, 45], [25, 25]], animationDuration: 6, animationDelay: 0 },
     { id: 4, team: 'home', path: [[25, 75], [50, 70], [75, 65], [60, 50], [35, 55], [25, 75]], animationDuration: 6.2, animationDelay: 0.3 },
@@ -381,7 +381,7 @@
   // Match: 5v5 + goalies skating with wider movements
   const matchPlayers: RinkPlayer[] = [
     // Home team goalie - moves side to side in crease
-    { id: 1, team: 'home', isGoalie: true, path: [[15, 40], [15, 60], [17, 50], [15, 45], [15, 55]], animationDuration: 3, animationDelay: 0 },
+    { id: 1, team: 'home', isGoalie: true, path: [[7, 45], [7, 55], [8, 50], [7, 48], [7, 52]], animationDuration: 3, animationDelay: 0 },
     // Home forwards - wide skating patterns
     { id: 2, team: 'home', path: [[30, 25], [50, 30], [65, 35], [55, 50], [40, 40], [30, 25]], animationDuration: 4, animationDelay: 0.1 },
     { id: 3, team: 'home', path: [[30, 75], [50, 70], [65, 65], [55, 50], [40, 60], [30, 75]], animationDuration: 4.2, animationDelay: 0.3 },
@@ -390,7 +390,7 @@
     { id: 5, team: 'home', path: [[22, 30], [28, 45], [22, 55], [18, 40], [22, 30]], animationDuration: 4.5, animationDelay: 0.4 },
     { id: 6, team: 'home', path: [[22, 70], [28, 55], [22, 45], [18, 60], [22, 70]], animationDuration: 4.8, animationDelay: 0.5 },
     // Away team goalie
-    { id: 7, team: 'away', isGoalie: true, path: [[85, 60], [85, 40], [83, 50], [85, 55], [85, 45]], animationDuration: 3, animationDelay: 0.1 },
+    { id: 7, team: 'away', isGoalie: true, path: [[93, 55], [93, 45], [92, 50], [93, 52], [93, 48]], animationDuration: 3, animationDelay: 0.1 },
     // Away forwards - wide skating patterns
     { id: 8, team: 'away', path: [[70, 25], [50, 30], [35, 35], [45, 50], [60, 40], [70, 25]], animationDuration: 4, animationDelay: 0.2 },
     { id: 9, team: 'away', path: [[70, 75], [50, 70], [35, 65], [45, 50], [60, 60], [70, 75]], animationDuration: 4.2, animationDelay: 0.4 },
@@ -439,14 +439,17 @@
     isPlayingMatch = true;
     lastMatchResult = null; // Clear previous result
 
-    // Start match clock countdown (5 seconds)
+    // Get dev speed multiplier for faster animations
+    const speed = game.dev.speedMultiplier;
+
+    // Start match clock countdown (5 seconds, adjusted for dev speed)
     matchTimeRemaining = 5.0;
     if (matchClockInterval) clearInterval(matchClockInterval);
     matchClockInterval = setInterval(() => {
-      matchTimeRemaining = Math.max(0, matchTimeRemaining - 0.1);
+      matchTimeRemaining = Math.max(0, matchTimeRemaining - (0.1 * speed));
     }, 100);
 
-    // Play match after animation delay (5 seconds of gameplay)
+    // Play match after animation delay (5 seconds / speed)
     matchAnimationTimer = setTimeout(() => {
       // Stop match clock
       if (matchClockInterval) {
@@ -458,20 +461,18 @@
       const result = gameState.playMatch();
       if (result) {
         lastMatchResult = result;
-        if (result.won) {
-          showGoalCelebration = true;
-          setTimeout(() => {
-            showGoalCelebration = false;
-          }, 2000);
-        }
+        showGoalCelebration = true;
+        setTimeout(() => {
+          showGoalCelebration = false;
+        }, 2000 / speed);
       }
 
-      // Return to training mode after showing result (2.5s to read result)
+      // Return to training mode after showing result
       setTimeout(() => {
         rinkMode = 'training';
         isPlayingMatch = false;
-      }, 2500);
-    }, 5000); // 5 seconds of match animation
+      }, 2500 / speed);
+    }, 5000 / speed);
   }
 
   // Cleanup timers on component destroy
@@ -492,22 +493,24 @@
 
 <div class="dashboard" class:celebrating={showGoalCelebration}>
   <!-- Goal celebration overlay -->
-  {#if showGoalCelebration}
-    <div class="goal-celebration">
-      <div class="goal-text">GOAL!</div>
-      <div class="confetti-container">
-        {#each Array(30) as _, i}
-          <div
-            class="confetti"
-            style="
-              --x: {Math.random() * 100}%;
-              --delay: {Math.random() * 0.5}s;
-              --rotation: {Math.random() * 360}deg;
-              --color: {['var(--score-gold)', 'var(--score-red)', 'var(--ice-blue)'][i % 3]};
-            "
-          ></div>
-        {/each}
-      </div>
+  {#if showGoalCelebration && lastMatchResult}
+    <div class="goal-celebration" class:loss={!lastMatchResult.won}>
+      <div class="goal-text">{lastMatchResult.won ? 'VICTORY!' : 'DEFEAT'}</div>
+      {#if lastMatchResult.won}
+        <div class="confetti-container">
+          {#each Array(30) as _, i}
+            <div
+              class="confetti"
+              style="
+                --x: {Math.random() * 100}%;
+                --delay: {Math.random() * 0.5}s;
+                --rotation: {Math.random() * 360}deg;
+                --color: {['var(--score-gold)', 'var(--score-red)', 'var(--ice-blue)'][i % 3]};
+              "
+            ></div>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1627,6 +1630,23 @@
       0 0 120px var(--score-gold);
     animation: score-flash 0.5s ease-out;
     letter-spacing: 0.2em;
+  }
+
+  /* Loss/Defeat styling */
+  .goal-celebration.loss {
+    background: radial-gradient(
+      circle at center,
+      rgba(220, 38, 38, 0.15) 0%,
+      transparent 70%
+    );
+  }
+
+  .goal-celebration.loss .goal-text {
+    color: var(--score-red);
+    text-shadow:
+      0 0 40px var(--score-red),
+      0 0 80px rgba(220, 38, 38, 0.5);
+    opacity: 0.8;
   }
 
   .confetti-container {
