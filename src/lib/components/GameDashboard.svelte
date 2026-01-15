@@ -2237,7 +2237,6 @@
     justify-content: center;
     gap: var(--space-lg);
     padding: var(--space-sm) var(--space-lg);
-    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
     border-radius: var(--radius-md) var(--radius-md) 0 0;
     max-width: 1200px;
     margin: 0 auto;
@@ -2482,7 +2481,6 @@
     overflow: hidden;
     transition: transform 0.1s, box-shadow 0.2s;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
-    background: var(--arena-deep); /* Match arena background to hide corners */
     border-radius: 12px; /* Match SVG rounded corners */
   }
 
