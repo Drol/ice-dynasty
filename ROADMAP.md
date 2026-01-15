@@ -6,19 +6,22 @@ Build a hockey empire from a small amateur club to an international franchise. I
 
 ---
 
-## Era 1: Grassroots (2-6 timmar)
+## Era 1: Grassroots (2-6 timmar) ✅ IMPLEMENTERAT
 
 ### Kärnmekanik
 - **Training Minutes** - Huvudvaluta (passiv + klick)
-- **Matcher** - Ger fans och pengar, låses upp vid 100 träningsminuter
+- **Matcher** - Ger fans och pengar, låses upp vid 100 träningsminuter, kostar training
 - **Lagmoral** - Global multiplier som köps med pengar
+- **Season System** - Prestige-loop med reputation som permanent valuta
+- **Match Tactics** - Välj Offensive/Balanced/Defensive innan varje match
 
 ### Resurser
 | Resurs | Källa | Användning |
 |--------|-------|------------|
-| Training Minutes | Passiv + klick | Köp upgrades |
-| Fans | Vinn matcher | Ökar matchinkomst, unlock-krav |
+| Training Minutes | Passiv + klick | Köp upgrades, spela matcher |
+| Fans | Vinn matcher | Ökar matchinkomst, unlock-krav, season progress |
 | Money | Spela matcher | Köp Lagmoral |
+| Reputation | Avsluta säsong | Permanenta upgrades (överlever reset) |
 
 ### Lagmoral (Global Multiplier)
 - Börjar på 1.0x
@@ -28,53 +31,86 @@ Build a hockey empire from a small amateur club to an international franchise. I
 - Kostnad skalas exponentiellt (100 → 150 → 225 → ...)
 - **Påverkar:** Träning/s, klickstyrka, matchvinst-chans (+1% per 20 nivåer)
 
-### Upgrades (14 totalt)
-
-**Alltid Tillgängliga (7):**
-| ID | Namn | Effekt | Baskostnad | Skalning | Max |
-|----|------|--------|------------|----------|-----|
-| better_skates | Better Skates | +1 click | 10 | 1.5x | 50 |
-| training_rink | Training Rink | +0.5/s training | 50 | 1.4x | 100 |
-| youth_program | Youth Program | +10% fans | 200 | 1.8x | 25 |
-| merchandise | Merchandise Stand | +20% money | 500 | 2.0x | 25 |
-| hockey_sticks | Better Sticks | +2 click | 25 | 1.6x | 40 |
-| volunteer_coaches | Volunteer Coaches | +1/s training | 100 | 1.5x | 75 |
-| garage_rink | Garage Rink | +2.5% win chance | 150 | 1.7x | 20 |
-
-**Upplåsbara (7):**
-| ID | Namn | Effekt | Kostnad | Krav |
-|----|------|--------|---------|------|
-| equipment_locker | Equipment Locker | 1.1x click mult | 400 | 500 fans |
-| local_sponsors | Local Sponsors | +$25 base money | 750 | 50 matcher |
-| team_jerseys | Team Jerseys | +5% fans & money | 1000 | 1000 fans |
-| outdoor_flooding | Outdoor Flooding | +3/s training | 2500 | 100 matcher |
-| community_support | Community Support | +50% fans | 5000 | 2500 fans |
-| tournament_entry | Tournament Entry | +100% win bonus | 10000 | 25 vinster |
-| grassroots_legend | Grassroots Legend | 1.25x training mult | 25000 | 5000 fans |
+### Season System (Prestige)
+- **Mål:** Vinn 10 matcher per säsong
+- **Belöning:** Reputation baserat på fans vid säsongsslut
+- **Reset:** Förlorar training, fans, money, morale, upgrades
+- **Behåller:** Reputation, achievements, challenge progress
+- **Reputation upgrades:** Permanenta bonusar som gäller alla säsonger
 
 ### Match System
 - **Unlock:** 100 träningsminuter
-- **Cooldown:** 30 sekunder
-- **Vinst-chans:** 40% bas, +30% max från träning, +bonus från upgrades/achievements
+- **Kostnad:** Training minutes (skalas med antal matcher)
+- **Tactics:**
+  - **Offensive:** -15% win chance, +50% money
+  - **Balanced:** Inga modifierare
+  - **Defensive:** +10% win chance, +50% fans, -30% money
+- **Vinst-chans:** 40% bas + bonusar från upgrades/achievements/tactics
 - **Vinst:** ~15 fans, 1.5x pengar
 - **Förlust:** ~5 fans, 1x pengar
-- **Pengar:** 50 + (fans × 2) × multipliers
+- **Auto-match:** Kan låsas upp med "Improved Jockstraps" upgrade
+
+### Upgrades (15 totalt)
+
+**Alltid Tillgängliga (7):**
+| ID | Namn | Effekt |
+|----|------|--------|
+| better_skates | Better Skates | +training per click |
+| training_rink | Training Rink | +training/s |
+| youth_program | Youth Program | +% fans |
+| merchandise | Merchandise Stand | +% money |
+| hockey_sticks | Better Sticks | +training per click |
+| volunteer_coaches | Volunteer Coaches | +training/s |
+| garage_rink | Garage Rink | +% win chance |
+
+**Upplåsbara (8):**
+| ID | Namn | Effekt | Krav |
+|----|------|--------|------|
+| equipment_locker | Equipment Locker | click multiplier | 500 fans |
+| local_sponsors | Local Sponsors | +base money | 50 matcher |
+| team_jerseys | Team Jerseys | +% fans & money | 1000 fans |
+| outdoor_flooding | Outdoor Flooding | +training/s | 100 matcher |
+| improved_jockstraps | Improved Jockstraps | **Auto-match** | 25 vinster |
+| community_support | Community Support | +% fans | 2500 fans |
+| tournament_entry | Tournament Entry | +win bonus | 25 vinster |
+| grassroots_legend | Grassroots Legend | training multiplier | 5000 fans |
+
+### UI: Unified Rink
+- **En vy för allt:** Träning och matcher i samma rink
+- **NES 8-bit stil:** Pixelspelare som åker runt
+- **Knappar:** "Practice" (träning) separerat från "Play Match" (3 tactics)
+- **Scoreboard:** Visar träningsrate under träning, matchresultat under match
+- **Animationer:** Matchklocka, victory/defeat-skärm, puck som rör sig
 
 ---
 
-## Challenges (Era 1)
+## Challenges (Era 1) ✅ IMPLEMENTERAT
 
-Frivilliga men starkt incentiverade. Utan challenges tar Era 2 ~3x längre.
+AD-inspirerat system med 8 challenges × 5 nivåer = 40 totala nivåer.
+Varje nivå har ökande svårighet och stackande rewards.
 
-| Challenge | Restriktion | Belöning | Unlock vid |
-|-----------|-------------|----------|------------|
-| **Rookie Mode** | 50% win chance cap | +10% base fan gain | 10 matcher |
-| **Fatigue Test** | Ingen passiv träning | +15% training rate | 500 fans |
-| **Budget Season** | 0$ i 10 matcher | +30% base money | $5000 |
-| **Marathon** | Vinn 5 i rad | +20% click power | 25 vinster |
-| **Underdog** | Vinn utan click-upgrades | +5% win chance | 50 vinster |
+### Challenge-lista
+| Challenge | Bas-restriktion | Bas-belöning |
+|-----------|-----------------|--------------|
+| **Rookie Season** | Win chance cap | +win chance |
+| **Budget Season** | No money income | +fan gain |
+| **Intensive Training** | Training decay | +training rate |
+| **All-Out Attack** | Forced offensive | +money gain |
+| **Defensive Grind** | Forced defensive | +fan gain |
+| **No Upgrades** | Can't buy upgrades | +all stats |
+| **Speed Run** | Time limit | +reputation |
+| **Marathon** | High win goal | +all stats |
 
-**Total bonus (alla challenges):** +10% fans, +15% training, +30% money, +20% click, +5% win
+### Nivåskalning
+- **Svårighet:** `[1.0x, 1.5x, 2.0x, 3.0x, 5.0x]`
+- **Rewards:** `[1.0x, 1.3x, 1.5x, 1.7x, 2.0x]` (stackar = 7.5x total vid L5)
+
+### Exempel på nivåprogression
+| Challenge | L1 | L2 | L3 | L4 | L5 |
+|-----------|-----|-----|-----|-----|-----|
+| Rookie Season | 50% cap | 45% | 40% | 35% | 30% |
+| Speed Run | 180s | 120s | 90s | 60s | 30s |
+| Marathon | 50 wins | 75 | 100 | 150 | 200 |
 
 ---
 
@@ -109,10 +145,12 @@ Alla achievements har dolda krav. Svåra/meningsfulla ger permanenta bonusar.
 
 ## Era 1 Completion
 
-**Krav för Era 2:**
+**Krav för Era 2:** (Ej implementerat ännu)
 - 10,000 fans
 - 50 vinster
 - $50,000
+
+**Nuvarande end-game:** Season System (prestige-loop med reputation)
 
 **Förväntad tid:** 2-6 timmar (med challenges)
 
